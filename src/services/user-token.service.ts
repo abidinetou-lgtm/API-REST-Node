@@ -1,12 +1,13 @@
 import { prisma } from "../lib/prisma.js";
 import { sendEmail } from "../lib/mailer.js";
 import { generateToken, hashToken } from "../lib/tokens.js";
-import { invitationEmail } from "../lib/email-templates.js";
+import { invitationEmail, passwordResetEmail } from "../lib/email-templates.js";
 import { HttpError } from "../utils/http-error.js";
 import type { Prisma } from "../generated/prisma/client.js";
 import type { TokenType } from "../generated/prisma/enums.js";
 
 const INVITATION_TTL_HOURS = 48;
+const PASSWORD_RESET_TTL_MINUTES = 30;
 
 type UserIdentity = { id: number; email: string; name: string };
 
@@ -49,4 +50,9 @@ export async function consumeUserToken(tx: Prisma.TransactionClient, token: stri
 export async function sendInvitation(user: UserIdentity) {
   const token = await createUserToken(user.id, "INVITATION", INVITATION_TTL_HOURS * 60 * 60 * 1000);
   await sendEmail({ to: user.email, ...invitationEmail(user.name, token, INVITATION_TTL_HOURS) });
+}
+
+export async function sendPasswordReset(user: UserIdentity) {
+  const token = await createUserToken(user.id, "PASSWORD_RESET", PASSWORD_RESET_TTL_MINUTES * 60 * 1000);
+  await sendEmail({ to: user.email, ...passwordResetEmail(user.name, token, PASSWORD_RESET_TTL_MINUTES) });
 }

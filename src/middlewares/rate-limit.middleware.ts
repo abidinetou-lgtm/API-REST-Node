@@ -10,11 +10,23 @@ export const globalLimiter = rateLimit({
   message: { error: "Too many requests, please try again later" },
 });
 
-// Stricter limit for endpoints exposed to brute force (login, password reset...)
-export const authLimiter = rateLimit({
+// Only failed attempts are counted, so normal logins are never blocked
+export const loginLimiter = rateLimit({
   windowMs: FIFTEEN_MINUTES,
   limit: 10,
+  skipSuccessfulRequests: true,
   standardHeaders: "draft-8",
   legacyHeaders: false,
   message: { error: "Too many attempts, please try again later" },
 });
+
+// For endpoints exposed to brute force or email spam. Each call creates its own counter.
+export function sensitiveLimiter() {
+  return rateLimit({
+    windowMs: FIFTEEN_MINUTES,
+    limit: 10,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: { error: "Too many attempts, please try again later" },
+  });
+}

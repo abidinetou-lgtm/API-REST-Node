@@ -1,9 +1,21 @@
 import { Router, type CookieOptions, type Request, type Response } from "express";
 import { env } from "../config/env.js";
-import { acceptInvitationSchema, loginSchema } from "../schemas/auth.schema.js";
-import { acceptInvitation, login, logout, refreshSession } from "../services/auth.service.js";
+import {
+  acceptInvitationSchema,
+  forgotPasswordSchema,
+  loginSchema,
+  resetPasswordSchema,
+} from "../schemas/auth.schema.js";
+import {
+  acceptInvitation,
+  login,
+  logout,
+  refreshSession,
+  requestPasswordReset,
+  resetPassword,
+} from "../services/auth.service.js";
 import { authenticate, currentUser } from "../middlewares/auth.middleware.js";
-import { authLimiter } from "../middlewares/rate-limit.middleware.js";
+import { loginLimiter, sensitiveLimiter } from "../middlewares/rate-limit.middleware.js";
 import { HttpError } from "../utils/http-error.js";
 
 export const authRouter = Router();
@@ -34,7 +46,7 @@ function readRefreshCookie(req: Request): string | null {
   return typeof token === "string" && token.length > 0 ? token : null;
 }
 
-authRouter.post("/login", authLimiter, async (req, res) => {
+authRouter.post("/login", loginLimiter, async (req, res) => {
   const { email, password } = loginSchema.parse(req.body);
   const { refreshToken, ...session } = await login(email, password);
 
@@ -68,9 +80,23 @@ authRouter.post("/logout", async (req, res) => {
   res.status(204).end();
 });
 
-authRouter.post("/accept-invitation", authLimiter, async (req, res) => {
+authRouter.post("/accept-invitation", sensitiveLimiter(), async (req, res) => {
   const { token, password } = acceptInvitationSchema.parse(req.body);
   await acceptInvitation(token, password);
+  res.status(204).end();
+});
+
+authRouter.post("/forgot-password", sensitiveLimiter(), async (req, res) => {
+  const { email } = forgotPasswordSchema.parse(req.body);
+  await requestPasswordReset(email);
+
+  // Same answer whether the account exists or not
+  res.json({ message: "If an account exists for this email, a reset link has been sent" });
+});
+
+authRouter.post("/reset-password", sensitiveLimiter(), async (req, res) => {
+  const { token, password } = resetPasswordSchema.parse(req.body);
+  await resetPassword(token, password);
   res.status(204).end();
 });
 

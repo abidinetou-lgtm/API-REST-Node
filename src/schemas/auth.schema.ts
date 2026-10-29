@@ -19,3 +19,12 @@ export const acceptInvitationSchema = z.object({
   token: tokenSchema,
   password: passwordSchema,
 });
+
+export const forgotPasswordSchema = z.object({
+  email: emailSchema,
+});
+
+export const resetPasswordSchema = z.object({
+  token: tokenSchema,
+  password: passwordSchema,
+});

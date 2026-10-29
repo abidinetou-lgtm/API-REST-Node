@@ -4,7 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { hashPassword, verifyPassword } from "../lib/password.js";
 import { generateToken, hashToken, signAccessToken } from "../lib/tokens.js";
 import { HttpError } from "../utils/http-error.js";
-import { consumeUserToken } from "./user-token.service.js";
+import { consumeUserToken, sendPasswordReset } from "./user-token.service.js";
 import type { Role } from "../generated/prisma/enums.js";
 
 // Compared against when the email is unknown, so the response time does not reveal
@@ -111,5 +111,38 @@ export async function acceptInvitation(token: string, password: string) {
     }
 
     await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+  });
+}
+
+export async function requestPasswordReset(email: string) {
+  const user = await prisma.user.findUnique({ where: { email } });
+
+  // Pending accounts must use their invitation, disabled accounts cannot reset
+  if (!user || !user.passwordHash || !user.isActive) {
+    return;
+  }
+
+  // Not awaited: the response time must not reveal whether the account exists
+  sendPasswordReset(user).catch((error) => console.error(error));
+}
+
+export async function resetPassword(token: string, password: string) {
+  const passwordHash = await hashPassword(password);
+
+  await prisma.$transaction(async (tx) => {
+    const userId = await consumeUserToken(tx, token, "PASSWORD_RESET");
+    const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+
+    if (!user.isActive) {
+      throw new HttpError(403, "Account disabled");
+    }
+
+    await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+
+    // Every existing session is closed after a password change
+    await tx.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
   });
 }
