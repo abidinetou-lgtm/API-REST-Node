@@ -2,6 +2,7 @@ import type { Request, RequestHandler } from "express";
 import { prisma } from "../lib/prisma.js";
 import { verifyAccessToken } from "../lib/tokens.js";
 import { HttpError } from "../utils/http-error.js";
+import type { Role } from "../generated/prisma/enums.js";
 
 export const authenticate: RequestHandler = async (req, _res, next) => {
   const header = req.headers.authorization;
@@ -31,4 +32,14 @@ export function currentUser(req: Request) {
     throw new HttpError(401, "Authentication required");
   }
   return req.user;
+}
+
+// Must be used after authenticate
+export function authorize(roles: Role[]): RequestHandler {
+  return (req, _res, next) => {
+    if (!roles.includes(currentUser(req).role)) {
+      throw new HttpError(403, "Forbidden");
+    }
+    next();
+  };
 }

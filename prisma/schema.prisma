@@ -31,8 +31,12 @@ model Ticket {
   title       String
   description String
   status      TicketStatus @default(OPEN)
+  createdById Int
+  createdBy   User         @relation(fields: [createdById], references: [id])
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+
+  @@index([createdById])
 }
 
 model User {
@@ -44,6 +48,7 @@ model User {
   isActive      Boolean        @default(true)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+  tickets       Ticket[]
   refreshTokens RefreshToken[]
   tokens        UserToken[]
 }
