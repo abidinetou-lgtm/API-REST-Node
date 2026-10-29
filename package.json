@@ -1,13 +1,17 @@
 {
   "name": "api-rest-node",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Support ticket REST API with authentication and role-based access control",
+  "main": "dist/server.js",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "prisma generate && tsc",
     "start": "node dist/server.js",
+    "db:deploy": "prisma migrate deploy",
     "seed": "node dist/scripts/seed.js",
     "seed:dev": "tsx src/scripts/seed.ts"
   },
