@@ -3,6 +3,7 @@ import helmet from "helmet";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { env } from "./config/env.js";
+import { authRouter } from "./routes/auth.routes.js";
 import { ticketRouter } from "./routes/ticket.routes.js";
 import { globalLimiter } from "./middlewares/rate-limit.middleware.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
@@ -29,6 +30,7 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+app.use("/auth", authRouter);
 app.use("/tickets", ticketRouter);
 
 app.use((_req, res) => {

@@ -2,6 +2,8 @@ import { prisma } from "../lib/prisma.js";
 import { sendEmail } from "../lib/mailer.js";
 import { generateToken, hashToken } from "../lib/tokens.js";
 import { invitationEmail } from "../lib/email-templates.js";
+import { HttpError } from "../utils/http-error.js";
+import type { Prisma } from "../generated/prisma/client.js";
 import type { TokenType } from "../generated/prisma/enums.js";
 
 const INVITATION_TTL_HOURS = 48;
@@ -23,6 +25,25 @@ async function createUserToken(userId: number, type: TokenType, ttlMs: number) {
   });
 
   return token;
+}
+
+// Marks the token as used and returns its user id. Must run inside a transaction
+// so the token is only consumed if the rest of the operation succeeds.
+export async function consumeUserToken(tx: Prisma.TransactionClient, token: string, type: TokenType) {
+  const tokenHash = hashToken(token);
+
+  // Conditional update: two concurrent requests with the same token cannot both succeed
+  const { count } = await tx.userToken.updateMany({
+    where: { tokenHash, type, usedAt: null, expiresAt: { gt: new Date() } },
+    data: { usedAt: new Date() },
+  });
+
+  if (count === 0) {
+    throw new HttpError(400, "Invalid or expired token");
+  }
+
+  const userToken = await tx.userToken.findUniqueOrThrow({ where: { tokenHash } });
+  return userToken.userId;
 }
 
 export async function sendInvitation(user: UserIdentity) {
