@@ -1,0 +1,15 @@
+Enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+Table Ticket {
+  id integer [pk, increment]
+  title text [not null]
+  description text [not null]
+  status TicketStatus [not null, default: 'OPEN']
+  createdAt timestamp [not null, default: `now()`]
+  updatedAt timestamp [not null]
+}
