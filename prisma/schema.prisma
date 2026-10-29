@@ -14,6 +14,18 @@ enum TicketStatus {
   CLOSED
 }
 
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  AGENT
+  USER
+}
+
+enum TokenType {
+  INVITATION
+  PASSWORD_RESET
+}
+
 model Ticket {
   id          Int          @id @default(autoincrement())
   title       String
@@ -21,4 +33,42 @@ model Ticket {
   status      TicketStatus @default(OPEN)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+}
+
+model User {
+  id            Int            @id @default(autoincrement())
+  email         String         @unique
+  name          String
+  role          Role           @default(USER)
+  passwordHash  String?
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  refreshTokens RefreshToken[]
+  tokens        UserToken[]
+}
+
+model RefreshToken {
+  id        Int       @id @default(autoincrement())
+  tokenHash String    @unique
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model UserToken {
+  id        Int       @id @default(autoincrement())
+  tokenHash String    @unique
+  type      TokenType
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
