@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import { env } from "./config/env.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { ticketRouter } from "./routes/ticket.routes.js";
+import { userRouter } from "./routes/user.routes.js";
 import { globalLimiter } from "./middlewares/rate-limit.middleware.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
 
@@ -32,6 +33,7 @@ app.get("/health", (_req, res) => {
 
 app.use("/auth", authRouter);
 app.use("/tickets", ticketRouter);
+app.use("/users", userRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Route not found" });
