@@ -28,3 +28,7 @@ export const resetPasswordSchema = z.object({
   token: tokenSchema,
   password: passwordSchema,
 });
+
+export type LoginInput = z.infer<typeof loginSchema>;
+export type TokenPasswordInput = z.infer<typeof acceptInvitationSchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
