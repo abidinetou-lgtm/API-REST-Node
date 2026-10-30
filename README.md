@@ -172,7 +172,7 @@ Les liens reçus par email ont la forme `APP_URL/accept-invitation?token=...` et
 | Méthode | Route | Accès | Body | Réponse |
 |---|---|---|---|---|
 | POST | `/users` | Super Admin | `{ email, name, role }` | `201` `{ user, invitationSent }` |
-| GET | `/users` | Super Admin, Admin | — | `200` la liste |
+| GET | `/users` | Super Admin, Admin | — | `200` `{ data, meta }` |
 | GET | `/users/:id` | Super Admin, Admin | — | `200` l'utilisateur |
 | POST | `/users/:id/resend-invitation` | Super Admin | — | `204` |
 | PATCH | `/users/:id/disable` | Super Admin, Admin | — | `200` l'utilisateur |
@@ -182,13 +182,14 @@ Les liens reçus par email ont la forme `APP_URL/accept-invitation?token=...` et
 - Chaque utilisateur a un `status` : `PENDING` (invitation pas encore acceptée), `ACTIVE` ou `DISABLED`.
 - Si l'email d'invitation n'a pas pu partir, le compte est quand même créé avec `invitationSent: false`, et l'invitation peut être renvoyée.
 - Un compte désactivé est bloqué immédiatement, même si son access token n'a pas expiré.
+- Filtres de `GET /users` : `role` (une ou plusieurs valeurs séparées par des virgules), `status` (`PENDING`, `ACTIVE`, `DISABLED`), `search` (nom ou email). Tri avec `sort` : `createdAt`, `name` ou `email`.
 
 ### Tickets — `/tickets` 🔒
 
 | Méthode | Route | Accès | Body | Réponse |
 |---|---|---|---|---|
 | POST | `/tickets` | Tous | `{ title, description }` | `201` le ticket |
-| GET | `/tickets` | Tous | — | `200` la liste |
+| GET | `/tickets` | Tous | — | `200` `{ data, meta }` |
 | GET | `/tickets/:id` | Tous | — | `200` le ticket |
 | PATCH | `/tickets/:id/status` | Super Admin, Admin, Agent | `{ status }` | `200` le ticket |
 
@@ -196,17 +197,50 @@ Les liens reçus par email ont la forme `APP_URL/accept-invitation?token=...` et
 - `status` vaut `OPEN`, `IN_PROGRESS`, `RESOLVED` ou `CLOSED`. Un ticket est `OPEN` à sa création.
 - Un User ne voit que ses tickets. S'il demande le ticket de quelqu'un d'autre, il reçoit `404`.
 
+### Pagination, filtres et tri
+
+Les listes (`GET /tickets`, `GET /users`) acceptent ces paramètres dans l'URL :
+
+| Paramètre | Valeur par défaut | Description |
+|---|---|---|
+| `page` | `1` | Numéro de la page |
+| `limit` | `20` | Éléments par page, 100 maximum |
+| `sort` | `createdAt` | Champ de tri |
+| `order` | `desc` | `asc` ou `desc` |
+
+Filtres de `GET /tickets` :
+
+| Paramètre | Exemple | Description |
+|---|---|---|
+| `status` | `OPEN,IN_PROGRESS` | Un ou plusieurs statuts |
+| `search` | `imprimante` | Cherche dans le titre et la description, sans tenir compte des majuscules |
+| `createdById` | `0193a2f1-...` | Tickets d'un utilisateur |
+| `createdFrom`, `createdTo` | `2026-10-01` | Période de création |
+
+Tri possible sur `createdAt`, `updatedAt`, `title` ou `status`. Un User reste limité à ses propres tickets, quels que soient les filtres.
+
+Exemple : `GET /tickets?status=OPEN,IN_PROGRESS&search=imprimante&sort=createdAt&order=desc&page=2&limit=10`
+
+```json
+{
+  "data": [ { "id": "...", "title": "..." } ],
+  "meta": { "page": 2, "limit": 10, "total": 34, "totalPages": 4 }
+}
+```
+
+Un paramètre invalide (`limit=1000`, `sort=password`, statut inconnu...) renvoie `400`.
+
 Exemple de ticket :
 
 ```json
 {
-  "id": 1,
+  "id": "0193a2f4-7c1e-7b3a-9f2d-4e8c1a6b5d70",
   "title": "Impossible de se connecter",
   "description": "Le bouton de connexion ne répond pas.",
   "status": "OPEN",
   "createdAt": "2026-10-29T10:40:24.499Z",
   "updatedAt": "2026-10-29T10:40:24.499Z",
-  "createdBy": { "id": 3, "name": "Paul Martin", "email": "paul@exemple.com" }
+  "createdBy": { "id": "0193a2f1-2b4d-7e6f-8a1c-3d5e7f9b1c2d", "name": "Paul Martin", "email": "paul@exemple.com" }
 }
 ```
 

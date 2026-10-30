@@ -2,7 +2,9 @@ import { prisma } from "../lib/prisma.js";
 import { HttpError } from "../utils/http-error.js";
 import { sendInvitation } from "./user-token.service.js";
 import { revokeAllSessions } from "./auth.service.js";
-import type { CreateUserInput } from "../schemas/user.schema.js";
+import { paginated, paginationArgs } from "../utils/pagination.js";
+import type { CreateUserInput, ListUsersQuery } from "../schemas/user.schema.js";
+import type { Prisma } from "../generated/prisma/client.js";
 import type { Role } from "../generated/prisma/enums.js";
 
 type Actor = { id: string; role: Role };
@@ -64,9 +66,38 @@ export async function resendInvitation(id: string) {
   await sendInvitation(user);
 }
 
-export async function listUsers() {
-  const users = await prisma.user.findMany({ orderBy: { createdAt: "desc" } });
-  return users.map(toPublicUser);
+const statusFilters: Record<ListUsersQuery["status"] & string, Prisma.UserWhereInput> = {
+  PENDING: { isActive: true, passwordHash: null },
+  ACTIVE: { isActive: true, passwordHash: { not: null } },
+  DISABLED: { isActive: false },
+};
+
+export async function listUsers(query: ListUsersQuery) {
+  const where: Prisma.UserWhereInput = {
+    AND: [
+      query.role ? { role: { in: query.role } } : {},
+      query.status ? statusFilters[query.status] : {},
+      query.search
+        ? {
+            OR: [
+              { name: { contains: query.search, mode: "insensitive" } },
+              { email: { contains: query.search, mode: "insensitive" } },
+            ],
+          }
+        : {},
+    ],
+  };
+
+  const [users, total] = await prisma.$transaction([
+    prisma.user.findMany({
+      where,
+      orderBy: [{ [query.sort]: query.order }, { id: query.order }],
+      ...paginationArgs(query),
+    }),
+    prisma.user.count({ where }),
+  ]);
+
+  return paginated(users.map(toPublicUser), total, query);
 }
 
 export async function getUser(id: string) {

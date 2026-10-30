@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { currentUser } from "../middlewares/auth.middleware.js";
 import { createUser, getUser, listUsers, resendInvitation, setUserActive } from "../services/user.service.js";
-import type { CreateUserInput } from "../schemas/user.schema.js";
+import type { CreateUserInput, ListUsersQuery } from "../schemas/user.schema.js";
 
 type IdParams = { id: string };
 
@@ -10,7 +10,8 @@ export async function create(req: Request<{}, unknown, CreateUserInput>, res: Re
 }
 
 export async function list(_req: Request, res: Response) {
-  res.json(await listUsers());
+  const query: ListUsersQuery = res.locals.query;
+  res.json(await listUsers(query));
 }
 
 export async function getById(req: Request<IdParams>, res: Response) {

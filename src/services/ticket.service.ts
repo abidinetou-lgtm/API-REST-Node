@@ -1,7 +1,9 @@
 import { prisma } from "../lib/prisma.js";
 import { HttpError } from "../utils/http-error.js";
 import { STAFF_ROLES } from "../utils/roles.js";
-import type { CreateTicketInput } from "../schemas/ticket.schema.js";
+import { paginated, paginationArgs } from "../utils/pagination.js";
+import type { CreateTicketInput, ListTicketsQuery } from "../schemas/ticket.schema.js";
+import type { Prisma } from "../generated/prisma/client.js";
 import type { Role, TicketStatus } from "../generated/prisma/enums.js";
 
 type Actor = { id: string; role: Role };
@@ -28,12 +30,36 @@ export async function createTicket(actor: Actor, input: CreateTicketInput) {
   });
 }
 
-export async function listTickets(actor: Actor) {
-  return prisma.ticket.findMany({
-    where: visibleTicketsFilter(actor),
-    select: ticketSelect,
-    orderBy: { createdAt: "desc" },
-  });
+export async function listTickets(actor: Actor, query: ListTicketsQuery) {
+  const where: Prisma.TicketWhereInput = {
+    AND: [
+      visibleTicketsFilter(actor),
+      query.status ? { status: { in: query.status } } : {},
+      query.createdById ? { createdById: query.createdById } : {},
+      query.createdFrom || query.createdTo ? { createdAt: { gte: query.createdFrom, lte: query.createdTo } } : {},
+      query.search
+        ? {
+            OR: [
+              { title: { contains: query.search, mode: "insensitive" } },
+              { description: { contains: query.search, mode: "insensitive" } },
+            ],
+          }
+        : {},
+    ],
+  };
+
+  const [tickets, total] = await prisma.$transaction([
+    prisma.ticket.findMany({
+      where,
+      select: ticketSelect,
+      // The id keeps the order stable between pages when two tickets share the same value
+      orderBy: [{ [query.sort]: query.order }, { id: query.order }],
+      ...paginationArgs(query),
+    }),
+    prisma.ticket.count({ where }),
+  ]);
+
+  return paginated(tickets, total, query);
 }
 
 export async function getTicket(actor: Actor, id: string) {

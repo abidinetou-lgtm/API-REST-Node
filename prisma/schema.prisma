@@ -37,6 +37,8 @@ model Ticket {
   updatedAt   DateTime     @updatedAt
 
   @@index([createdById])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model User {
