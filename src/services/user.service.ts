@@ -5,10 +5,10 @@ import { revokeAllSessions } from "./auth.service.js";
 import type { CreateUserInput } from "../schemas/user.schema.js";
 import type { Role } from "../generated/prisma/enums.js";
 
-type Actor = { id: number; role: Role };
+type Actor = { id: string; role: Role };
 
 type UserRecord = {
-  id: number;
+  id: string;
   email: string;
   name: string;
   role: Role;
@@ -23,7 +23,7 @@ function toPublicUser({ passwordHash, ...user }: UserRecord) {
   return { ...user, status };
 }
 
-async function findUserOrThrow(id: number) {
+async function findUserOrThrow(id: string) {
   const user = await prisma.user.findUnique({ where: { id } });
   if (!user) {
     throw new HttpError(404, "User not found");
@@ -51,7 +51,7 @@ export async function createUser(input: CreateUserInput) {
   return { user: toPublicUser(user), invitationSent };
 }
 
-export async function resendInvitation(id: number) {
+export async function resendInvitation(id: string) {
   const user = await findUserOrThrow(id);
 
   if (user.passwordHash) {
@@ -69,7 +69,7 @@ export async function listUsers() {
   return users.map(toPublicUser);
 }
 
-export async function getUser(id: number) {
+export async function getUser(id: string) {
   return toPublicUser(await findUserOrThrow(id));
 }
 
@@ -80,7 +80,7 @@ function canManage(actor: Actor, targetRole: Role) {
   return actor.role === "ADMIN" && (targetRole === "AGENT" || targetRole === "USER");
 }
 
-export async function setUserActive(actor: Actor, id: number, isActive: boolean) {
+export async function setUserActive(actor: Actor, id: string, isActive: boolean) {
   if (actor.id === id) {
     throw new HttpError(400, "You cannot change the status of your own account");
   }

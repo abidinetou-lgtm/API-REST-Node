@@ -9,9 +9,9 @@ import type { TokenType } from "../generated/prisma/enums.js";
 const INVITATION_TTL_HOURS = 48;
 const PASSWORD_RESET_TTL_MINUTES = 30;
 
-type UserIdentity = { id: number; email: string; name: string };
+type UserIdentity = { id: string; email: string; name: string };
 
-async function createUserToken(userId: number, type: TokenType, ttlMs: number) {
+async function createUserToken(userId: string, type: TokenType, ttlMs: number) {
   const token = generateToken();
 
   // Only the latest link stays valid

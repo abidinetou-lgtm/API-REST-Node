@@ -11,7 +11,7 @@ export const updateStatusSchema = z.object({
 });
 
 export const ticketIdSchema = z.object({
-  id: z.coerce.number().int().positive(),
+  id: z.uuid(),
 });
 
 export type CreateTicketInput = z.infer<typeof createTicketSchema>;

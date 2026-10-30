@@ -18,7 +18,7 @@ Enum TokenType {
 }
 
 Table User {
-  id integer [pk, increment]
+  id uuid [pk, note: 'UUID v7']
   email text [not null, unique]
   name text [not null]
   role Role [not null, default: 'USER']
@@ -29,11 +29,11 @@ Table User {
 }
 
 Table Ticket {
-  id integer [pk, increment]
+  id uuid [pk, note: 'UUID v7']
   title text [not null]
   description text [not null]
   status TicketStatus [not null, default: 'OPEN']
-  createdById integer [not null, ref: > User.id]
+  createdById uuid [not null, ref: > User.id]
   createdAt timestamp [not null, default: `now()`]
   updatedAt timestamp [not null]
 
@@ -45,7 +45,7 @@ Table Ticket {
 Table RefreshToken {
   id integer [pk, increment]
   tokenHash text [not null, unique]
-  userId integer [not null, ref: > User.id]
+  userId uuid [not null, ref: > User.id]
   expiresAt timestamp [not null]
   revokedAt timestamp
   createdAt timestamp [not null, default: `now()`]
@@ -59,7 +59,7 @@ Table UserToken {
   id integer [pk, increment]
   tokenHash text [not null, unique]
   type TokenType [not null]
-  userId integer [not null, ref: > User.id]
+  userId uuid [not null, ref: > User.id]
   expiresAt timestamp [not null]
   usedAt timestamp
   createdAt timestamp [not null, default: `now()`]

@@ -68,7 +68,7 @@ describe("Ticket visibility", () => {
 
   it("returns 404 for a missing ticket and 400 for an invalid id", async () => {
     const { token } = await loginAs("AGENT");
-    expect((await api().get("/tickets/999999").set(bearer(token))).status).toBe(404);
+    expect((await api().get("/tickets/0193a2f4-7c1e-7b3a-9f2d-4e8c1a6b5d70").set(bearer(token))).status).toBe(404);
     expect((await api().get("/tickets/abc").set(bearer(token))).status).toBe(400);
   });
 });
@@ -101,7 +101,7 @@ describe("PATCH /tickets/:id/status", () => {
     const invalid = await api().patch(`/tickets/${ticket.body.id}/status`).set(bearer(token)).send({ status: "DONE" });
     expect(invalid.status).toBe(400);
 
-    const missing = await api().patch("/tickets/999999/status").set(bearer(token)).send({ status: "CLOSED" });
+    const missing = await api().patch("/tickets/0193a2f4-7c1e-7b3a-9f2d-4e8c1a6b5d70/status").set(bearer(token)).send({ status: "CLOSED" });
     expect(missing.status).toBe(404);
   });
 });

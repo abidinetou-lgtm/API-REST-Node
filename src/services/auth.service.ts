@@ -11,7 +11,7 @@ import type { Role } from "../generated/prisma/enums.js";
 // whether an account exists
 const dummyHash = hashPassword(randomBytes(16).toString("hex"));
 
-type SessionUser = { id: number; email: string; name: string; role: Role };
+type SessionUser = { id: string; email: string; name: string; role: Role };
 
 async function createSession(user: SessionUser) {
   const refreshToken = generateToken();
@@ -92,7 +92,7 @@ export async function logout(refreshToken: string) {
   });
 }
 
-export async function revokeAllSessions(userId: number) {
+export async function revokeAllSessions(userId: string) {
   await prisma.refreshToken.updateMany({
     where: { userId, revokedAt: null },
     data: { revokedAt: new Date() },

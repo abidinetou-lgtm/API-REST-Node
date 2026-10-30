@@ -4,7 +4,7 @@ import { STAFF_ROLES } from "../utils/roles.js";
 import type { CreateTicketInput } from "../schemas/ticket.schema.js";
 import type { Role, TicketStatus } from "../generated/prisma/enums.js";
 
-type Actor = { id: number; role: Role };
+type Actor = { id: string; role: Role };
 
 const ticketSelect = {
   id: true,
@@ -36,7 +36,7 @@ export async function listTickets(actor: Actor) {
   });
 }
 
-export async function getTicket(actor: Actor, id: number) {
+export async function getTicket(actor: Actor, id: string) {
   // A ticket owned by someone else returns 404, not 403, to avoid revealing that it exists
   const ticket = await prisma.ticket.findFirst({
     where: { id, ...visibleTicketsFilter(actor) },
@@ -49,7 +49,7 @@ export async function getTicket(actor: Actor, id: number) {
   return ticket;
 }
 
-export async function updateTicketStatus(id: number, status: TicketStatus) {
+export async function updateTicketStatus(id: string, status: TicketStatus) {
   const exists = await prisma.ticket.findUnique({ where: { id }, select: { id: true } });
   if (!exists) {
     throw new HttpError(404, "Ticket not found");

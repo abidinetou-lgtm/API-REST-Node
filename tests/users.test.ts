@@ -126,7 +126,7 @@ describe("Disable and enable accounts", () => {
 
   it("returns 404 for an unknown user", async () => {
     const { token } = await loginAs("SUPER_ADMIN");
-    expect((await api().patch("/users/999999/disable").set(bearer(token))).status).toBe(404);
+    expect((await api().patch("/users/0193a2f4-7c1e-7b3a-9f2d-4e8c1a6b5d70/disable").set(bearer(token))).status).toBe(404);
   });
 });
 

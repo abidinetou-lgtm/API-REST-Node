@@ -14,18 +14,18 @@ export async function list(_req: Request, res: Response) {
 }
 
 export async function getById(req: Request<IdParams>, res: Response) {
-  res.json(await getUser(Number(req.params.id)));
+  res.json(await getUser(req.params.id));
 }
 
 export async function resendInvite(req: Request<IdParams>, res: Response) {
-  await resendInvitation(Number(req.params.id));
+  await resendInvitation(req.params.id);
   res.status(204).end();
 }
 
 export async function disable(req: Request<IdParams>, res: Response) {
-  res.json(await setUserActive(currentUser(req), Number(req.params.id), false));
+  res.json(await setUserActive(currentUser(req), req.params.id, false));
 }
 
 export async function enable(req: Request<IdParams>, res: Response) {
-  res.json(await setUserActive(currentUser(req), Number(req.params.id), true));
+  res.json(await setUserActive(currentUser(req), req.params.id, true));
 }
