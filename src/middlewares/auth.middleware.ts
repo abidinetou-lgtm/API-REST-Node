@@ -27,7 +27,7 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
   next();
 };
 
-export function currentUser(req: Request) {
+export function currentUser(req: Pick<Request, "user">) {
   if (!req.user) {
     throw new HttpError(401, "Authentication required");
   }
