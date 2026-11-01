@@ -7,12 +7,18 @@ import {
   resetPasswordSchema,
 } from "../schemas/auth.schema.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
-import { loginLimiter, sensitiveLimiter } from "../middlewares/rate-limit.middleware.js";
+import { loginAccountLimiter, loginIpLimiter, sensitiveLimiter } from "../middlewares/rate-limit.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
 
 export const authRouter = Router();
 
-authRouter.post("/login", loginLimiter, validate({ body: loginSchema }), authController.loginUser);
+authRouter.post(
+  "/login",
+  loginIpLimiter,
+  validate({ body: loginSchema }),
+  loginAccountLimiter,
+  authController.loginUser,
+);
 authRouter.post("/refresh", authController.refresh);
 authRouter.post("/logout", authController.logoutUser);
 authRouter.post("/accept-invitation", sensitiveLimiter(), validate({ body: acceptInvitationSchema }), authController.acceptInvite);

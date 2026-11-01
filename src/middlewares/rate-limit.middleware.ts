@@ -16,10 +16,22 @@ export const globalLimiter = rateLimit({
 });
 
 // Only failed attempts are counted, so normal logins are never blocked
-export const loginLimiter = rateLimit({
+export const loginIpLimiter = rateLimit({
   windowMs: FIFTEEN_MINUTES,
   limit: 10,
   skipSuccessfulRequests: true,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  handler: tooManyRequests,
+});
+
+// Same idea per account: stops an attacker who changes IP address to target one account.
+// Must run after the body validation so the email is normalized.
+export const loginAccountLimiter = rateLimit({
+  windowMs: FIFTEEN_MINUTES,
+  limit: 5,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => `login:${req.body.email}`,
   standardHeaders: "draft-8",
   legacyHeaders: false,
   handler: tooManyRequests,
