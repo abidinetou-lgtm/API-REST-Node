@@ -2,6 +2,7 @@ import { prisma } from "../lib/prisma.js";
 import { HttpError } from "../utils/http-error.js";
 import { STAFF_ROLES } from "../utils/roles.js";
 import { paginated, paginationArgs } from "../utils/pagination.js";
+import { recordAudit } from "./audit.service.js";
 import type { CreateTicketInput, ListTicketsQuery } from "../schemas/ticket.schema.js";
 import type { Prisma } from "../generated/prisma/client.js";
 import type { Role, TicketStatus } from "../generated/prisma/enums.js";
@@ -75,11 +76,24 @@ export async function getTicket(actor: Actor, id: string) {
   return ticket;
 }
 
-export async function updateTicketStatus(id: string, status: TicketStatus) {
-  const exists = await prisma.ticket.findUnique({ where: { id }, select: { id: true } });
-  if (!exists) {
+export async function updateTicketStatus(actor: Actor, id: string, status: TicketStatus) {
+  const ticket = await prisma.ticket.findUnique({ where: { id }, select: { status: true } });
+  if (!ticket) {
     throw new HttpError(404, "TICKET_NOT_FOUND", "Ticket not found");
   }
 
-  return prisma.ticket.update({ where: { id }, data: { status }, select: ticketSelect });
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.ticket.update({ where: { id }, data: { status }, select: ticketSelect });
+
+    if (ticket.status !== status) {
+      await recordAudit(tx, {
+        action: "TICKET_STATUS_CHANGED",
+        actorId: actor.id,
+        targetType: "TICKET",
+        targetId: id,
+        metadata: { from: ticket.status, to: status },
+      });
+    }
+    return updated;
+  });
 }

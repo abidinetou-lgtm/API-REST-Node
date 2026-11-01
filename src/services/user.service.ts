@@ -2,8 +2,9 @@ import { prisma } from "../lib/prisma.js";
 import { HttpError } from "../utils/http-error.js";
 import { sendInvitation } from "./user-token.service.js";
 import { revokeAllSessions } from "./auth.service.js";
+import { recordAudit } from "./audit.service.js";
 import { paginated, paginationArgs } from "../utils/pagination.js";
-import type { CreateUserInput, ListUsersQuery } from "../schemas/user.schema.js";
+import type { ChangeRoleInput, CreateUserInput, ListUsersQuery } from "../schemas/user.schema.js";
 import type { Prisma } from "../generated/prisma/client.js";
 import type { Role } from "../generated/prisma/enums.js";
 
@@ -33,13 +34,23 @@ async function findUserOrThrow(id: string) {
   return user;
 }
 
-export async function createUser(input: CreateUserInput) {
+export async function createUser(actor: Actor, input: CreateUserInput) {
   const existing = await prisma.user.findUnique({ where: { email: input.email } });
   if (existing) {
     throw new HttpError(409, "EMAIL_ALREADY_IN_USE", "Email already in use");
   }
 
-  const user = await prisma.user.create({ data: input });
+  const user = await prisma.$transaction(async (tx) => {
+    const created = await tx.user.create({ data: input });
+    await recordAudit(tx, {
+      action: "USER_CREATED",
+      actorId: actor.id,
+      targetType: "USER",
+      targetId: created.id,
+      metadata: { email: created.email, role: created.role },
+    });
+    return created;
+  });
 
   // The account is kept even if the email fails: the invitation can be sent again later
   let invitationSent = true;
@@ -53,7 +64,7 @@ export async function createUser(input: CreateUserInput) {
   return { user: toPublicUser(user), invitationSent };
 }
 
-export async function resendInvitation(id: string) {
+export async function resendInvitation(actor: Actor, id: string) {
   const user = await findUserOrThrow(id);
 
   if (user.passwordHash) {
@@ -64,6 +75,7 @@ export async function resendInvitation(id: string) {
   }
 
   await sendInvitation(user);
+  await recordAudit(prisma, { action: "INVITATION_RESENT", actorId: actor.id, targetType: "USER", targetId: id });
 }
 
 const statusFilters: Record<ListUsersQuery["status"] & string, Prisma.UserWhereInput> = {
@@ -121,11 +133,55 @@ export async function setUserActive(actor: Actor, id: string, isActive: boolean)
     throw new HttpError(403, "FORBIDDEN", "Forbidden");
   }
 
-  const user = await prisma.user.update({ where: { id }, data: { isActive } });
-
-  if (!isActive) {
-    await revokeAllSessions(id);
+  if (target.isActive === isActive) {
+    return toPublicUser(target);
   }
+
+  const user = await prisma.$transaction(async (tx) => {
+    const updated = await tx.user.update({ where: { id }, data: { isActive } });
+
+    if (!isActive) {
+      await revokeAllSessions(id, tx);
+    }
+
+    await recordAudit(tx, {
+      action: isActive ? "USER_ENABLED" : "USER_DISABLED",
+      actorId: actor.id,
+      targetType: "USER",
+      targetId: id,
+    });
+    return updated;
+  });
+
+  return toPublicUser(user);
+}
+
+export async function changeUserRole(actor: Actor, id: string, { role }: ChangeRoleInput) {
+  if (actor.id === id) {
+    throw new HttpError(400, "CANNOT_MANAGE_OWN_ACCOUNT", "You cannot change the role of your own account");
+  }
+
+  const target = await findUserOrThrow(id);
+  if (!canManage(actor, target.role)) {
+    throw new HttpError(403, "FORBIDDEN", "Forbidden");
+  }
+
+  if (target.role === role) {
+    return toPublicUser(target);
+  }
+
+  // The role is read from the database on every request, so the change applies immediately
+  const user = await prisma.$transaction(async (tx) => {
+    const updated = await tx.user.update({ where: { id }, data: { role } });
+    await recordAudit(tx, {
+      action: "USER_ROLE_CHANGED",
+      actorId: actor.id,
+      targetType: "USER",
+      targetId: id,
+      metadata: { from: target.role, to: role },
+    });
+    return updated;
+  });
 
   return toPublicUser(user);
 }

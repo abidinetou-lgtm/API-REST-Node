@@ -3,7 +3,7 @@ import { prisma } from "../src/lib/prisma.js";
 
 beforeEach(async () => {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "Ticket", "RefreshToken", "UserToken", "User" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "AuditLog", "Ticket", "RefreshToken", "UserToken", "User" RESTART IDENTITY CASCADE',
   );
 
   // Emails are printed with console.log in tests: capture them to read the links

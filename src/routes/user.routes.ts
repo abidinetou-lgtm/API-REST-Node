@@ -1,6 +1,6 @@
 import { Router } from "express";
 import * as userController from "../controllers/user.controller.js";
-import { createUserSchema, listUsersSchema, userIdSchema } from "../schemas/user.schema.js";
+import { changeRoleSchema, createUserSchema, listUsersSchema, userIdSchema } from "../schemas/user.schema.js";
 import { authenticate, authorize } from "../middlewares/auth.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
 import { ADMIN_ROLES } from "../utils/roles.js";
@@ -15,3 +15,9 @@ userRouter.get("/:id", authorize(ADMIN_ROLES), validate({ params: userIdSchema }
 userRouter.post("/:id/resend-invitation", authorize(["SUPER_ADMIN"]), validate({ params: userIdSchema }), userController.resendInvite);
 userRouter.patch("/:id/disable", authorize(ADMIN_ROLES), validate({ params: userIdSchema }), userController.disable);
 userRouter.patch("/:id/enable", authorize(ADMIN_ROLES), validate({ params: userIdSchema }), userController.enable);
+userRouter.patch(
+  "/:id/role",
+  authorize(["SUPER_ADMIN"]),
+  validate({ params: userIdSchema, body: changeRoleSchema }),
+  userController.changeRole,
+);

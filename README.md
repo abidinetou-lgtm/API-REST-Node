@@ -177,12 +177,38 @@ Les liens reçus par email ont la forme `APP_URL/accept-invitation?token=...` et
 | POST | `/users/:id/resend-invitation` | Super Admin | — | `204` |
 | PATCH | `/users/:id/disable` | Super Admin, Admin | — | `200` l'utilisateur |
 | PATCH | `/users/:id/enable` | Super Admin, Admin | — | `200` l'utilisateur |
+| PATCH | `/users/:id/role` | Super Admin | `{ role }` | `200` l'utilisateur |
 
-- `role` vaut `ADMIN`, `AGENT` ou `USER`.
+- `role` vaut `ADMIN`, `AGENT` ou `USER`. Personne ne peut devenir Super Admin par l'API, ni changer son propre rôle.
+- Un changement de rôle s'applique tout de suite, sans que la personne ait à se reconnecter.
 - Chaque utilisateur a un `status` : `PENDING` (invitation pas encore acceptée), `ACTIVE` ou `DISABLED`.
 - Si l'email d'invitation n'a pas pu partir, le compte est quand même créé avec `invitationSent: false`, et l'invitation peut être renvoyée.
 - Un compte désactivé est bloqué immédiatement, même si son access token n'a pas expiré.
 - Filtres de `GET /users` : `role` (une ou plusieurs valeurs séparées par des virgules), `status` (`PENDING`, `ACTIVE`, `DISABLED`), `search` (nom ou email). Tri avec `sort` : `createdAt`, `name` ou `email`.
+
+### Audit logs — `/audit-logs` 🔒
+
+| Méthode | Route | Accès | Réponse |
+|---|---|---|---|
+| GET | `/audit-logs` | Super Admin | `200` `{ data, meta }` |
+
+Chaque action sensible est enregistrée : qui l'a faite, sur quoi, quand, depuis quelle adresse IP, avec l'identifiant de la requête.
+
+| Action | Déclenchée par |
+|---|---|
+| `USER_CREATED` | Création d'un compte (ou du Super Admin par le seed) |
+| `USER_ROLE_CHANGED` | Changement de rôle, avec l'ancien et le nouveau |
+| `USER_DISABLED`, `USER_ENABLED` | Désactivation, réactivation |
+| `INVITATION_RESENT`, `INVITATION_ACCEPTED` | Invitation renvoyée, acceptée |
+| `PASSWORD_RESET` | Mot de passe réinitialisé |
+| `REFRESH_TOKEN_REUSED` | Un refresh token déjà utilisé a été présenté : probable vol, toutes les sessions sont fermées |
+| `TICKET_STATUS_CHANGED` | Changement de statut d'un ticket, avec l'ancien et le nouveau |
+
+- Le log est écrit dans la même transaction que l'action : une action refusée ou en échec ne laisse pas de trace, et une action réussie a toujours son log.
+- Les logs ne peuvent être ni modifiés ni supprimés : la base de données le refuse, même si le code essayait.
+- Filtres : `action` (une ou plusieurs), `actorId`, `targetType` (`USER`, `TICKET`), `targetId`, `from`, `to`, plus la pagination.
+
+Exemple : `GET /audit-logs?targetId=0193a2f1-...` donne l'historique complet d'un utilisateur.
 
 ### Tickets — `/tickets` 🔒
 
@@ -304,6 +330,7 @@ erDiagram
   User ||--o{ Ticket : "crée"
   User ||--o{ RefreshToken : "possède"
   User ||--o{ UserToken : "reçoit"
+  User |o--o{ AuditLog : "agit"
 
   User {
     uuid id PK
@@ -342,6 +369,18 @@ erDiagram
     uuid userId FK
     datetime expiresAt
     datetime usedAt "rempli quand le lien a servi"
+    datetime createdAt
+  }
+
+  AuditLog {
+    uuid id PK
+    AuditAction action
+    uuid actorId FK "vide si l'action ne vient pas d'un utilisateur"
+    AuditTargetType targetType "USER, TICKET"
+    uuid targetId
+    json metadata "par exemple l'ancien et le nouveau rôle"
+    string ipAddress
+    string requestId
     datetime createdAt
   }
 ```

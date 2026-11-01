@@ -19,5 +19,5 @@ export async function getById(req: Request<IdParams>, res: Response) {
 }
 
 export async function updateStatus(req: Request<IdParams, unknown, UpdateStatusInput>, res: Response) {
-  res.json(await updateTicketStatus(req.params.id, req.body.status));
+  res.json(await updateTicketStatus(currentUser(req), req.params.id, req.body.status));
 }

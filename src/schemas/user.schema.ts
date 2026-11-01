@@ -3,11 +3,17 @@ import { Role } from "../generated/prisma/enums.js";
 import { emailSchema } from "./auth.schema.js";
 import { commaList, paginationSchema, searchSchema } from "./pagination.schema.js";
 
+// A super admin cannot be created or promoted through the API
+const assignableRoleSchema = z.enum(["ADMIN", "AGENT", "USER"]);
+
 export const createUserSchema = z.object({
   email: emailSchema,
   name: z.string().trim().min(2).max(100),
-  // A super admin cannot be created through the API
-  role: z.enum(["ADMIN", "AGENT", "USER"]),
+  role: assignableRoleSchema,
+});
+
+export const changeRoleSchema = z.object({
+  role: assignableRoleSchema,
 });
 
 export const userIdSchema = z.object({
@@ -22,4 +28,5 @@ export const listUsersSchema = paginationSchema.extend({
 });
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;
+export type ChangeRoleInput = z.infer<typeof changeRoleSchema>;
 export type ListUsersQuery = z.infer<typeof listUsersSchema>;

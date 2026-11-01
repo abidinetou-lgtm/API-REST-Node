@@ -17,6 +17,23 @@ Enum TokenType {
   PASSWORD_RESET
 }
 
+Enum AuditAction {
+  USER_CREATED
+  USER_ROLE_CHANGED
+  USER_DISABLED
+  USER_ENABLED
+  INVITATION_RESENT
+  INVITATION_ACCEPTED
+  PASSWORD_RESET
+  REFRESH_TOKEN_REUSED
+  TICKET_STATUS_CHANGED
+}
+
+Enum AuditTargetType {
+  USER
+  TICKET
+}
+
 Table User {
   id uuid [pk, note: 'UUID v7']
   email text [not null, unique]
@@ -66,5 +83,25 @@ Table UserToken {
 
   indexes {
     userId
+  }
+}
+
+// Append only: rows are never updated or deleted
+Table AuditLog {
+  id uuid [pk, note: 'UUID v7']
+  action AuditAction [not null]
+  actorId uuid [ref: > User.id, note: 'Empty when the action is not done by a logged in user']
+  targetType AuditTargetType [not null]
+  targetId uuid [not null]
+  metadata jsonb
+  ipAddress text
+  requestId text
+  createdAt timestamp [not null, default: `now()`]
+
+  indexes {
+    actorId
+    (targetType, targetId)
+    action
+    createdAt
   }
 }

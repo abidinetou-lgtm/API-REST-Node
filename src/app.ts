@@ -6,6 +6,7 @@ import { env } from "./config/env.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { ticketRouter } from "./routes/ticket.routes.js";
 import { userRouter } from "./routes/user.routes.js";
+import { auditRouter } from "./routes/audit.routes.js";
 import { globalLimiter } from "./middlewares/rate-limit.middleware.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
 import { requestId } from "./middlewares/request-id.middleware.js";
@@ -38,6 +39,7 @@ app.get("/health", (_req, res) => {
 app.use("/auth", authRouter);
 app.use("/tickets", ticketRouter);
 app.use("/users", userRouter);
+app.use("/audit-logs", auditRouter);
 
 app.use((_req, res) => {
   sendError(res, 404, "ROUTE_NOT_FOUND", "Route not found");

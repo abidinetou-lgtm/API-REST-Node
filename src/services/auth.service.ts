@@ -5,6 +5,8 @@ import { hashPassword, verifyPassword } from "../lib/password.js";
 import { generateToken, hashToken, signAccessToken } from "../lib/tokens.js";
 import { HttpError } from "../utils/http-error.js";
 import { consumeUserToken, sendPasswordReset } from "./user-token.service.js";
+import { recordAudit } from "./audit.service.js";
+import type { Prisma } from "../generated/prisma/client.js";
 import type { Role } from "../generated/prisma/enums.js";
 
 // Compared against when the email is unknown, so the response time does not reveal
@@ -63,7 +65,15 @@ export async function refreshSession(refreshToken: string) {
 
   // A revoked token being used again means it was probably stolen: end every session of this user
   if (stored.revokedAt) {
-    await revokeAllSessions(stored.userId);
+    await prisma.$transaction(async (tx) => {
+      await revokeAllSessions(stored.userId, tx);
+      await recordAudit(tx, {
+        action: "REFRESH_TOKEN_REUSED",
+        actorId: null,
+        targetType: "USER",
+        targetId: stored.userId,
+      });
+    });
     throw new HttpError(401, "INVALID_REFRESH_TOKEN", "Invalid refresh token");
   }
 
@@ -92,8 +102,8 @@ export async function logout(refreshToken: string) {
   });
 }
 
-export async function revokeAllSessions(userId: string) {
-  await prisma.refreshToken.updateMany({
+export async function revokeAllSessions(userId: string, db: Prisma.TransactionClient = prisma) {
+  await db.refreshToken.updateMany({
     where: { userId, revokedAt: null },
     data: { revokedAt: new Date() },
   });
@@ -111,6 +121,7 @@ export async function acceptInvitation(token: string, password: string) {
     }
 
     await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+    await recordAudit(tx, { action: "INVITATION_ACCEPTED", actorId: userId, targetType: "USER", targetId: userId });
   });
 }
 
@@ -140,9 +151,7 @@ export async function resetPassword(token: string, password: string) {
     await tx.user.update({ where: { id: userId }, data: { passwordHash } });
 
     // Every existing session is closed after a password change
-    await tx.refreshToken.updateMany({
-      where: { userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
+    await revokeAllSessions(userId, tx);
+    await recordAudit(tx, { action: "PASSWORD_RESET", actorId: userId, targetType: "USER", targetId: userId });
   });
 }
