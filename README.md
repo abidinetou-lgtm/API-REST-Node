@@ -17,13 +17,14 @@ Une API pour gérer des tickets de support, avec des comptes utilisateurs, une c
 3. [Premier lancement : créer le Super Admin](#premier-lancement--créer-le-super-admin)
 4. [Les rôles](#les-rôles)
 5. [Comment fonctionne la connexion](#comment-fonctionne-la-connexion)
-6. [Les routes](#les-routes)
-7. [Les erreurs](#les-erreurs)
-8. [Sécurité](#sécurité)
-9. [Base de données](#base-de-données)
-10. [Déploiement](#déploiement)
-11. [Tests automatisés](#tests-automatisés)
-12. [Tester avec Insomnia](#tester-avec-insomnia)
+6. [Documentation Swagger](#documentation-swagger)
+7. [Les routes](#les-routes)
+8. [Les erreurs](#les-erreurs)
+9. [Sécurité](#sécurité)
+10. [Base de données](#base-de-données)
+11. [Déploiement](#déploiement)
+12. [Tests automatisés](#tests-automatisés)
+13. [Tester avec Insomnia](#tester-avec-insomnia)
 
 ---
 
@@ -79,6 +80,7 @@ Toutes les variables sont vérifiées au démarrage. S'il en manque une ou si el
 | `MAIL_FROM_EMAIL` | Adresse d'expédition des emails (vérifiée dans Brevo) | `no-reply@mondomaine.com` |
 | `MAIL_FROM_NAME` | Nom de l'expéditeur | `Support Ticket` |
 | `SUPER_ADMIN_EMAIL` | Email du Super Admin, utilisé par le script de création | `admin@mondomaine.com` |
+| `DOCS_ENABLED` | Affiche la documentation Swagger sur `/docs`. Activée par défaut, sauf en production | `true` |
 
 Pour générer un `JWT_ACCESS_SECRET` :
 
@@ -145,9 +147,24 @@ Le refresh token est dans un cookie `httpOnly` : le JavaScript de la page ne peu
 
 ---
 
+## Documentation Swagger
+
+L'API a une documentation interactive (Swagger UI), générée à partir des schémas de validation : elle reste toujours à jour avec le code.
+
+- **http://localhost:3000/docs** : toutes les routes, leurs paramètres, leurs réponses. Bouton **Try it out** pour les essayer.
+- **http://localhost:3000/docs/openapi.json** : le fichier OpenAPI brut, à importer dans Insomnia ou Postman.
+
+Pour les routes protégées : se connecter avec `POST /auth/login`, copier l'`accessToken`, cliquer sur **Authorize** et le coller.
+
+Un test vérifie que chaque route de l'API est documentée et que les vraies réponses correspondent à la documentation.
+
+En production, la documentation est cachée, sauf si `DOCS_ENABLED=true`.
+
+---
+
 ## Les routes
 
-Les routes marquées 🔒 demandent l'en-tête `Authorization: Bearer <accessToken>`.
+Les routes marquées 🔒 demandent l'en-tête `Authorization: Bearer <accessToken>`. Le détail complet de chaque route est dans la [documentation Swagger](#documentation-swagger).
 
 ### Authentification — `/auth`
 
@@ -448,6 +465,10 @@ Les tests tournent aussi automatiquement sur GitHub (GitHub Actions) à chaque p
 ---
 
 ## Tester avec Insomnia
+
+Le plus rapide : **Import → From URL** avec `http://localhost:3000/docs/openapi.json`. Insomnia crée toutes les requêtes d'un coup.
+
+À la main :
 
 1. Lancer l'API avec `npm run dev`.
 2. Créer un environnement avec `base_url` = `http://localhost:3000` et `token` = vide.

@@ -10,10 +10,13 @@ export const paginationSchema = z.object({
 
 // "OPEN,IN_PROGRESS" -> ["OPEN", "IN_PROGRESS"]
 export function commaList<T extends z.ZodType<unknown, string>>(item: T) {
+  const values = item instanceof z.ZodEnum ? `: ${item.options.join(", ")}` : "";
+
   return z
     .string()
     .transform((value) => value.split(",").map((part) => part.trim()))
-    .pipe(z.array(item).min(1));
+    .pipe(z.array(item).min(1))
+    .meta({ description: `One or several values separated by commas${values}` });
 }
 
 export const searchSchema = z.string().trim().min(1).max(100);
