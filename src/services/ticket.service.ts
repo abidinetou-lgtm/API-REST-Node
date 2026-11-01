@@ -70,7 +70,7 @@ export async function getTicket(actor: Actor, id: string) {
   });
 
   if (!ticket) {
-    throw new HttpError(404, "Ticket not found");
+    throw new HttpError(404, "TICKET_NOT_FOUND", "Ticket not found");
   }
   return ticket;
 }
@@ -78,7 +78,7 @@ export async function getTicket(actor: Actor, id: string) {
 export async function updateTicketStatus(id: string, status: TicketStatus) {
   const exists = await prisma.ticket.findUnique({ where: { id }, select: { id: true } });
   if (!exists) {
-    throw new HttpError(404, "Ticket not found");
+    throw new HttpError(404, "TICKET_NOT_FOUND", "Ticket not found");
   }
 
   return prisma.ticket.update({ where: { id }, data: { status }, select: ticketSelect });

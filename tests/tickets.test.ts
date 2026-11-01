@@ -34,7 +34,7 @@ describe("Tickets", () => {
     const res = await api().post("/tickets").set(bearer(token)).send({ title: "ab" });
 
     expect(res.status).toBe(400);
-    expect(res.body.details.map((detail: { field: string }) => detail.field)).toEqual(["title", "description"]);
+    expect(res.body.error.details.map((detail: { field: string }) => detail.field)).toEqual(["title", "description"]);
   });
 });
 

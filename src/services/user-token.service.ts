@@ -40,7 +40,7 @@ export async function consumeUserToken(tx: Prisma.TransactionClient, token: stri
   });
 
   if (count === 0) {
-    throw new HttpError(400, "Invalid or expired token");
+    throw new HttpError(400, "INVALID_TOKEN", "Invalid or expired token");
   }
 
   const userToken = await tx.userToken.findUniqueOrThrow({ where: { tokenHash } });

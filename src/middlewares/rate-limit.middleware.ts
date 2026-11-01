@@ -1,13 +1,18 @@
-import { rateLimit } from "express-rate-limit";
+import { rateLimit, type Options } from "express-rate-limit";
+import { sendError } from "../utils/http-error.js";
 
 const FIFTEEN_MINUTES = 15 * 60 * 1000;
+
+const tooManyRequests: Options["handler"] = (_req, res, _next, options) => {
+  sendError(res, options.statusCode, "TOO_MANY_REQUESTS", "Too many requests, please try again later");
+};
 
 export const globalLimiter = rateLimit({
   windowMs: FIFTEEN_MINUTES,
   limit: 300,
   standardHeaders: "draft-8",
   legacyHeaders: false,
-  message: { error: "Too many requests, please try again later" },
+  handler: tooManyRequests,
 });
 
 // Only failed attempts are counted, so normal logins are never blocked
@@ -17,7 +22,7 @@ export const loginLimiter = rateLimit({
   skipSuccessfulRequests: true,
   standardHeaders: "draft-8",
   legacyHeaders: false,
-  message: { error: "Too many attempts, please try again later" },
+  handler: tooManyRequests,
 });
 
 // For endpoints exposed to brute force or email spam. Each call creates its own counter.
@@ -27,6 +32,6 @@ export function sensitiveLimiter() {
     limit: 10,
     standardHeaders: "draft-8",
     legacyHeaders: false,
-    message: { error: "Too many attempts, please try again later" },
+    handler: tooManyRequests,
   });
 }

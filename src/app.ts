@@ -8,6 +8,8 @@ import { ticketRouter } from "./routes/ticket.routes.js";
 import { userRouter } from "./routes/user.routes.js";
 import { globalLimiter } from "./middlewares/rate-limit.middleware.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
+import { requestId } from "./middlewares/request-id.middleware.js";
+import { sendError } from "./utils/http-error.js";
 
 export const app = express();
 
@@ -16,11 +18,13 @@ if (env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
 
+app.use(requestId);
 app.use(helmet());
 app.use(
   cors({
     origin: env.CORS_ORIGIN.split(",").map((origin) => origin.trim()),
     credentials: true,
+    exposedHeaders: ["X-Request-Id"],
   }),
 );
 app.use(globalLimiter);
@@ -36,7 +40,7 @@ app.use("/tickets", ticketRouter);
 app.use("/users", userRouter);
 
 app.use((_req, res) => {
-  res.status(404).json({ error: "Route not found" });
+  sendError(res, 404, "ROUTE_NOT_FOUND", "Route not found");
 });
 
 app.use(errorHandler);

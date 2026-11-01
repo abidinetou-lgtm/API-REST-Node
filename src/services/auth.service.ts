@@ -36,16 +36,16 @@ export async function login(email: string, password: string) {
 
   if (!user || !user.passwordHash) {
     await verifyPassword(await dummyHash, password);
-    throw new HttpError(401, "Invalid credentials");
+    throw new HttpError(401, "INVALID_CREDENTIALS", "Invalid credentials");
   }
 
   const isValid = await verifyPassword(user.passwordHash, password);
   if (!isValid) {
-    throw new HttpError(401, "Invalid credentials");
+    throw new HttpError(401, "INVALID_CREDENTIALS", "Invalid credentials");
   }
 
   if (!user.isActive) {
-    throw new HttpError(403, "Account disabled");
+    throw new HttpError(403, "ACCOUNT_DISABLED", "Account disabled");
   }
 
   return createSession(user);
@@ -58,17 +58,17 @@ export async function refreshSession(refreshToken: string) {
   });
 
   if (!stored) {
-    throw new HttpError(401, "Invalid refresh token");
+    throw new HttpError(401, "INVALID_REFRESH_TOKEN", "Invalid refresh token");
   }
 
   // A revoked token being used again means it was probably stolen: end every session of this user
   if (stored.revokedAt) {
     await revokeAllSessions(stored.userId);
-    throw new HttpError(401, "Invalid refresh token");
+    throw new HttpError(401, "INVALID_REFRESH_TOKEN", "Invalid refresh token");
   }
 
   if (stored.expiresAt <= new Date() || !stored.user.isActive) {
-    throw new HttpError(401, "Invalid refresh token");
+    throw new HttpError(401, "INVALID_REFRESH_TOKEN", "Invalid refresh token");
   }
 
   // Rotation: the old token is revoked before a new one is issued.
@@ -79,7 +79,7 @@ export async function refreshSession(refreshToken: string) {
   });
 
   if (count === 0) {
-    throw new HttpError(401, "Invalid refresh token");
+    throw new HttpError(401, "INVALID_REFRESH_TOKEN", "Invalid refresh token");
   }
 
   return createSession(stored.user);
@@ -107,7 +107,7 @@ export async function acceptInvitation(token: string, password: string) {
     const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
 
     if (!user.isActive) {
-      throw new HttpError(403, "Account disabled");
+      throw new HttpError(403, "ACCOUNT_DISABLED", "Account disabled");
     }
 
     await tx.user.update({ where: { id: userId }, data: { passwordHash } });
@@ -134,7 +134,7 @@ export async function resetPassword(token: string, password: string) {
     const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
 
     if (!user.isActive) {
-      throw new HttpError(403, "Account disabled");
+      throw new HttpError(403, "ACCOUNT_DISABLED", "Account disabled");
     }
 
     await tx.user.update({ where: { id: userId }, data: { passwordHash } });

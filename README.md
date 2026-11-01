@@ -248,27 +248,37 @@ Exemple de ticket :
 
 ## Les erreurs
 
-Toutes les erreurs ont la forme `{ "error": "message" }`. Les erreurs de validation précisent les champs en cause :
+Toutes les erreurs ont la même forme :
 
 ```json
 {
-  "error": "Validation failed",
-  "details": [
-    { "field": "password", "message": "Password must contain at least 8 characters" }
-  ]
+  "error": {
+    "code": "VALIDATION_FAILED",
+    "message": "Validation failed",
+    "details": [
+      { "field": "password", "message": "Password must contain at least 8 characters" }
+    ],
+    "requestId": "7f3c2a1e-5b9d-4c8e-a2f1-0d6e4b8c9a7f"
+  }
 }
 ```
 
-| Code | Signification |
+- `code` ne change jamais : c'est lui que le front-end doit tester. `message` est fait pour être lu et peut évoluer.
+- `details` n'apparaît que pour les erreurs de validation.
+- `requestId` est aussi renvoyé dans l'en-tête `X-Request-Id` de chaque réponse. Pour une erreur 500, il est écrit dans les logs du serveur : il suffit de le chercher pour retrouver l'erreur.
+
+| Statut | Codes |
 |------|---------------|
-| 400 | Données invalides, ou lien expiré / déjà utilisé |
-| 401 | Non connecté, token invalide ou identifiants incorrects |
-| 403 | Connecté, mais pas autorisé (rôle insuffisant ou compte désactivé) |
-| 404 | Ressource introuvable |
-| 409 | Conflit (email déjà utilisé, invitation déjà acceptée) |
-| 413 | Body trop volumineux |
-| 429 | Trop de requêtes, réessayer plus tard |
-| 500 | Erreur du serveur |
+| 400 | `VALIDATION_FAILED`, `INVALID_JSON`, `INVALID_TOKEN` (lien expiré ou déjà utilisé), `CANNOT_MANAGE_OWN_ACCOUNT` |
+| 401 | `AUTHENTICATION_REQUIRED`, `INVALID_CREDENTIALS`, `INVALID_REFRESH_TOKEN` |
+| 403 | `FORBIDDEN` (rôle insuffisant), `ACCOUNT_DISABLED` |
+| 404 | `TICKET_NOT_FOUND`, `USER_NOT_FOUND`, `ROUTE_NOT_FOUND`, `NOT_FOUND` |
+| 409 | `EMAIL_ALREADY_IN_USE`, `INVITATION_ALREADY_ACCEPTED`, `ACCOUNT_DISABLED`, `CONFLICT` |
+| 413 | `PAYLOAD_TOO_LARGE` |
+| 429 | `TOO_MANY_REQUESTS` |
+| 500 | `INTERNAL_ERROR` (le détail n'est jamais envoyé au client) |
+
+Les réponses réussies renvoient directement la ressource (`GET /tickets/:id` renvoie le ticket), et les listes renvoient `{ data, meta }`.
 
 ---
 

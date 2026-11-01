@@ -28,7 +28,7 @@ function toPublicUser({ passwordHash, ...user }: UserRecord) {
 async function findUserOrThrow(id: string) {
   const user = await prisma.user.findUnique({ where: { id } });
   if (!user) {
-    throw new HttpError(404, "User not found");
+    throw new HttpError(404, "USER_NOT_FOUND", "User not found");
   }
   return user;
 }
@@ -36,7 +36,7 @@ async function findUserOrThrow(id: string) {
 export async function createUser(input: CreateUserInput) {
   const existing = await prisma.user.findUnique({ where: { email: input.email } });
   if (existing) {
-    throw new HttpError(409, "Email already in use");
+    throw new HttpError(409, "EMAIL_ALREADY_IN_USE", "Email already in use");
   }
 
   const user = await prisma.user.create({ data: input });
@@ -57,10 +57,10 @@ export async function resendInvitation(id: string) {
   const user = await findUserOrThrow(id);
 
   if (user.passwordHash) {
-    throw new HttpError(409, "Invitation already accepted");
+    throw new HttpError(409, "INVITATION_ALREADY_ACCEPTED", "Invitation already accepted");
   }
   if (!user.isActive) {
-    throw new HttpError(409, "Account disabled");
+    throw new HttpError(409, "ACCOUNT_DISABLED", "Account disabled");
   }
 
   await sendInvitation(user);
@@ -113,12 +113,12 @@ function canManage(actor: Actor, targetRole: Role) {
 
 export async function setUserActive(actor: Actor, id: string, isActive: boolean) {
   if (actor.id === id) {
-    throw new HttpError(400, "You cannot change the status of your own account");
+    throw new HttpError(400, "CANNOT_MANAGE_OWN_ACCOUNT", "You cannot change the status of your own account");
   }
 
   const target = await findUserOrThrow(id);
   if (!canManage(actor, target.role)) {
-    throw new HttpError(403, "Forbidden");
+    throw new HttpError(403, "FORBIDDEN", "Forbidden");
   }
 
   const user = await prisma.user.update({ where: { id }, data: { isActive } });
