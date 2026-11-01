@@ -15,6 +15,8 @@
     "seed": "node dist/scripts/seed.js",
     "seed:dev": "tsx src/scripts/seed.ts",
     "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
     "test:watch": "vitest"
   },
   "repository": {

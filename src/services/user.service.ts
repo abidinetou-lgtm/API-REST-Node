@@ -4,6 +4,7 @@ import { sendInvitation } from "./user-token.service.js";
 import { revokeAllSessions } from "./auth.service.js";
 import { recordAudit } from "./audit.service.js";
 import { paginated, paginationArgs } from "../utils/pagination.js";
+import { canManage } from "../utils/roles.js";
 import type { ChangeRoleInput, CreateUserInput, ListUsersQuery } from "../schemas/user.schema.js";
 import type { Prisma } from "../generated/prisma/client.js";
 import type { Role } from "../generated/prisma/enums.js";
@@ -116,20 +117,13 @@ export async function getUser(id: string) {
   return toPublicUser(await findUserOrThrow(id));
 }
 
-// Super admin can manage everyone else, admins can only manage agents and users
-function canManage(actor: Actor, targetRole: Role) {
-  if (targetRole === "SUPER_ADMIN") return false;
-  if (actor.role === "SUPER_ADMIN") return true;
-  return actor.role === "ADMIN" && (targetRole === "AGENT" || targetRole === "USER");
-}
-
 export async function setUserActive(actor: Actor, id: string, isActive: boolean) {
   if (actor.id === id) {
     throw new HttpError(400, "CANNOT_MANAGE_OWN_ACCOUNT", "You cannot change the status of your own account");
   }
 
   const target = await findUserOrThrow(id);
-  if (!canManage(actor, target.role)) {
+  if (!canManage(actor.role, target.role)) {
     throw new HttpError(403, "FORBIDDEN", "Forbidden");
   }
 
@@ -162,7 +156,7 @@ export async function changeUserRole(actor: Actor, id: string, { role }: ChangeR
   }
 
   const target = await findUserOrThrow(id);
-  if (!canManage(actor, target.role)) {
+  if (!canManage(actor.role, target.role)) {
     throw new HttpError(403, "FORBIDDEN", "Forbidden");
   }
 

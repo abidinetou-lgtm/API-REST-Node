@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { prisma } from "../src/lib/prisma.js";
+import { prisma } from "../../src/lib/prisma.js";
 import { PASSWORD, api, bearer, createUser, emailToken, login, loginAs } from "./helpers.js";
 
 describe("POST /auth/login", () => {

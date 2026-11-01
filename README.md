@@ -315,7 +315,10 @@ Les réponses réussies renvoient directement la ressource (`GET /tickets/:id` r
 - **Liens à usage unique**, avec une durée de validité limitée.
 - **Refresh token** dans un cookie `httpOnly`, `Secure` et `SameSite` en production, avec rotation et détection de réutilisation.
 - **Pas de fuite d'information** : le login et la demande de réinitialisation répondent de la même façon, et dans le même temps, que le compte existe ou non.
-- **Limitation des requêtes** : 300 requêtes par 15 minutes au total ; sur le login, 10 échecs par 15 minutes ; sur l'invitation et la réinitialisation, 10 essais par 15 minutes.
+- **Limitation des requêtes** : 300 requêtes par 15 minutes au total ; sur l'invitation et la réinitialisation, 10 essais par 15 minutes.
+- **Protection contre le brute-force sur le login**, avec deux limites qui ne comptent que les échecs :
+  - **par adresse IP** : 10 échecs par 15 minutes, contre quelqu'un qui essaie beaucoup de comptes ;
+  - **par compte** : 5 échecs par 15 minutes, contre quelqu'un qui change d'adresse IP pour viser un seul compte. L'email est normalisé avant d'être compté, donc `Paul@Example.com` et `paul@example.com` comptent pour le même compte.
 - **En-têtes HTTP** sécurisés avec Helmet, **CORS** limité au front-end autorisé, body limité à 10 ko.
 - **Validation** de toutes les entrées avec Zod.
 - **Identifiants non devinables** : les utilisateurs et les tickets ont un UUID v7 (`/tickets/0193a2f4-7c1e-...`) au lieu de 1, 2, 3. On ne peut pas parcourir les ressources en changeant le numéro dans l'URL, ni deviner le volume d'activité. Le v7 commence par la date, ce qui garde l'index de la base rapide.
@@ -416,7 +419,14 @@ L'API se déploie sur n'importe quel hébergeur Node.js (Render, Railway, Fly.io
 
 ## Tests automatisés
 
-Les tests vérifient toute l'API : connexion, sessions, invitations, réinitialisation du mot de passe, droits de chaque rôle et tickets. Ils utilisent une base séparée, `tickets_test`, vidée avant chaque test. Les données de développement ne sont jamais touchées et aucun email n'est envoyé.
+Il y a deux sortes de tests :
+
+| Dossier | Ce qui est testé | Base de données |
+|---|---|---|
+| `tests/unit/` | Les fonctions seules : tokens, mots de passe, emails, règles des rôles, schémas Zod, pagination, middlewares | Non, quelques secondes |
+| `tests/integration/` | L'API complète par des requêtes HTTP : connexion, sessions, invitations, droits de chaque rôle, tickets, pagination, audit logs, limites de requêtes, injection SQL | Oui |
+
+Les tests d'intégration utilisent une base séparée, `tickets_test`, vidée avant chaque test. Les données de développement ne sont jamais touchées et aucun email n'est envoyé.
 
 Créer la base de test une seule fois :
 
@@ -427,8 +437,10 @@ docker exec tickets-db psql -U postgres -c "CREATE DATABASE tickets_test;"
 Lancer les tests :
 
 ```bash
-npm test             # une fois
-npm run test:watch   # en continu, pendant le développement
+npm test                   # tous les tests
+npm run test:unit          # seulement les tests unitaires, sans base de données
+npm run test:integration   # seulement les tests d'intégration
+npm run test:watch         # en continu, pendant le développement
 ```
 
 Les tests tournent aussi automatiquement sur GitHub (GitHub Actions) à chaque push sur `main` ou `develop` et à chaque Pull Request.
