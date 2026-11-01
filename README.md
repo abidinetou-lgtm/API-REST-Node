@@ -460,7 +460,19 @@ npm run test:integration   # seulement les tests d'intégration
 npm run test:watch         # en continu, pendant le développement
 ```
 
-Les tests tournent aussi automatiquement sur GitHub (GitHub Actions) à chaque push sur `main` ou `develop` et à chaque Pull Request.
+### Intégration continue (GitHub Actions)
+
+À chaque push, sur toutes les branches, et à chaque Pull Request, GitHub lance trois vérifications en parallèle :
+
+| Job | Ce qui est vérifié |
+|---|---|
+| **Types, build and dependencies** | Le projet compile, le code et les tests sont bien typés, aucune dépendance de production n'a de faille de sécurité connue (`npm audit`) |
+| **Unit tests** | Les tests unitaires |
+| **Integration tests** | Les tests d'intégration sur une vraie base PostgreSQL, puis la base obtenue par les migrations est comparée au schéma Prisma : un oubli de migration est détecté |
+
+Un nouveau push sur la même branche annule la vérification encore en cours. Une Pull Request ne doit être mergée que si les trois jobs sont verts.
+
+Dependabot propose aussi chaque semaine, sur `develop`, une Pull Request pour mettre à jour les dépendances. La CI vérifie la mise à jour avant qu'on la merge.
 
 ---
 
@@ -489,7 +501,9 @@ En développement, sans `BREVO_API_KEY`, les emails (invitation, réinitialisati
 | `npm start` | Lance la version compilée |
 | `npm run db:deploy` | Applique les migrations (production) |
 | `npm run seed:dev` / `npm run seed` | Crée le Super Admin |
-| `npm test` | Lance les tests automatisés |
+| `npm test` | Lance tous les tests automatisés |
+| `npm run typecheck` | Vérifie les types du code et des tests |
+| `npm run db:check` | Vérifie que la base correspond au schéma Prisma (aucune migration oubliée) |
 | `docker compose up -d` | Démarre la base de données locale |
 | `docker compose stop` | Arrête la base de données locale |
 | `npx prisma studio` | Ouvre une interface pour consulter la base |

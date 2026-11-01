@@ -20,7 +20,7 @@ function declaredRoutes() {
 
   collect((app as unknown as { router: { stack: Layer[] } }).router.stack, "");
   for (const [prefix, router] of Object.entries(apiRouters)) {
-    collect(router.stack, prefix);
+    collect(router.stack as unknown as Layer[], prefix);
   }
   return routes.sort();
 }

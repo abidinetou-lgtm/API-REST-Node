@@ -2,12 +2,58 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: ["**"]
   pull_request:
 
+# A new push on the same branch cancels the run that is still in progress
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
-  test:
+  checks:
+    name: Types, build and dependencies
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm run typecheck
+      # Fails if a production dependency has a known high or critical vulnerability
+      - run: npm audit --omit=dev --audit-level=high
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run test:unit
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     services:
       postgres:
@@ -38,5 +84,6 @@ jobs:
 
       - run: npm ci
       - run: npx prisma generate
-      - run: npx tsc --noEmit
-      - run: npm test
+      - run: npm run test:integration
+      # The tests applied every migration: the database must now match the Prisma schema
+      - run: npm run db:check
