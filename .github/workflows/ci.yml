@@ -19,6 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
+    env:
+      # Required by prisma.config.ts, prisma generate never connects to it
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+
     steps:
       - uses: actions/checkout@v4
 
@@ -37,6 +41,10 @@ jobs:
     name: Unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
+
+    env:
+      # Required by prisma.config.ts, prisma generate never connects to it
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
 
     steps:
       - uses: actions/checkout@v4
