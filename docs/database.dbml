@@ -27,11 +27,19 @@ Enum AuditAction {
   PASSWORD_RESET
   REFRESH_TOKEN_REUSED
   TICKET_STATUS_CHANGED
+  AI_SETTING_CHANGED
 }
 
 Enum AuditTargetType {
   USER
   TICKET
+  AI_SETTING
+}
+
+Enum MessageAuthorType {
+  CUSTOMER
+  SUPPORT
+  AI
 }
 
 Table User {
@@ -51,12 +59,40 @@ Table Ticket {
   description text [not null]
   status TicketStatus [not null, default: 'OPEN']
   createdById uuid [not null, ref: > User.id]
+  needsAgent boolean [not null, default: true, note: 'The customer waits for a person of the support team']
   createdAt timestamp [not null, default: `now()`]
   updatedAt timestamp [not null]
 
   indexes {
     createdById
+    status
+    needsAgent
+    createdAt
   }
+}
+
+Table TicketMessage {
+  id uuid [pk, note: 'UUID v7']
+  ticketId uuid [not null, ref: > Ticket.id, note: 'Deleted with the ticket']
+  authorType MessageAuthorType [not null]
+  authorId uuid [ref: > User.id, note: 'Empty for the messages of the AI']
+  body text [not null]
+  createdAt timestamp [not null, default: `now()`]
+
+  indexes {
+    (ticketId, createdAt)
+    authorId
+  }
+}
+
+// No row for a status: the default of the code is used
+Table AiStatusSetting {
+  id uuid [pk, note: 'UUID v7']
+  status TicketStatus [not null, unique]
+  autoReply boolean [not null]
+  instructions text [not null]
+  updatedById uuid [ref: > User.id]
+  updatedAt timestamp [not null]
 }
 
 Table RefreshToken {
