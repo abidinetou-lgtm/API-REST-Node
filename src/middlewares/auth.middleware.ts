@@ -10,7 +10,7 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
   const userId = token ? verifyAccessToken(token) : null;
 
   if (!userId) {
-    throw new HttpError(401, "Authentication required");
+    throw new HttpError(401, "AUTHENTICATION_REQUIRED", "Authentication required");
   }
 
   // Loaded on every request so that a disabled account or a role change applies immediately
@@ -20,7 +20,7 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
   });
 
   if (!user || !user.isActive) {
-    throw new HttpError(401, "Authentication required");
+    throw new HttpError(401, "AUTHENTICATION_REQUIRED", "Authentication required");
   }
 
   req.user = { id: user.id, email: user.email, name: user.name, role: user.role };
@@ -29,7 +29,7 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
 
 export function currentUser(req: Pick<Request, "user">) {
   if (!req.user) {
-    throw new HttpError(401, "Authentication required");
+    throw new HttpError(401, "AUTHENTICATION_REQUIRED", "Authentication required");
   }
   return req.user;
 }
@@ -38,7 +38,7 @@ export function currentUser(req: Pick<Request, "user">) {
 export function authorize(roles: Role[]): RequestHandler {
   return (req, _res, next) => {
     if (!roles.includes(currentUser(req).role)) {
-      throw new HttpError(403, "Forbidden");
+      throw new HttpError(403, "FORBIDDEN", "Forbidden");
     }
     next();
   };

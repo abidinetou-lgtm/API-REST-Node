@@ -26,21 +26,40 @@ enum TokenType {
   PASSWORD_RESET
 }
 
+enum AuditAction {
+  USER_CREATED
+  USER_ROLE_CHANGED
+  USER_DISABLED
+  USER_ENABLED
+  INVITATION_RESENT
+  INVITATION_ACCEPTED
+  PASSWORD_RESET
+  REFRESH_TOKEN_REUSED
+  TICKET_STATUS_CHANGED
+}
+
+enum AuditTargetType {
+  USER
+  TICKET
+}
+
 model Ticket {
-  id          Int          @id @default(autoincrement())
+  id          String       @id @default(uuid(7)) @db.Uuid
   title       String
   description String
   status      TicketStatus @default(OPEN)
-  createdById Int
+  createdById String       @db.Uuid
   createdBy   User         @relation(fields: [createdById], references: [id])
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
   @@index([createdById])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model User {
-  id            Int            @id @default(autoincrement())
+  id            String         @id @default(uuid(7)) @db.Uuid
   email         String         @unique
   name          String
   role          Role           @default(USER)
@@ -51,12 +70,13 @@ model User {
   tickets       Ticket[]
   refreshTokens RefreshToken[]
   tokens        UserToken[]
+  auditLogs     AuditLog[]
 }
 
 model RefreshToken {
   id        Int       @id @default(autoincrement())
   tokenHash String    @unique
-  userId    Int
+  userId    String    @db.Uuid
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   revokedAt DateTime?
@@ -69,11 +89,31 @@ model UserToken {
   id        Int       @id @default(autoincrement())
   tokenHash String    @unique
   type      TokenType
-  userId    Int
+  userId    String    @db.Uuid
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
 
   @@index([userId])
+}
+
+// Append only: rows are never updated or deleted
+model AuditLog {
+  id         String          @id @default(uuid(7)) @db.Uuid
+  action     AuditAction
+  // Empty when the action is not done by a logged in user (seed, stolen token detection)
+  actorId    String?         @db.Uuid
+  actor      User?           @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  targetType AuditTargetType
+  targetId   String          @db.Uuid
+  metadata   Json?
+  ipAddress  String?
+  requestId  String?
+  createdAt  DateTime        @default(now())
+
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@index([action])
+  @@index([createdAt])
 }

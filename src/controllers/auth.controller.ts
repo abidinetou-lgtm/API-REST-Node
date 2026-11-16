@@ -47,7 +47,7 @@ export async function loginUser(req: Request<{}, unknown, LoginInput>, res: Resp
 export async function refresh(req: Request, res: Response) {
   const token = readRefreshCookie(req);
   if (!token) {
-    throw new HttpError(401, "Invalid refresh token");
+    throw new HttpError(401, "INVALID_REFRESH_TOKEN", "Invalid refresh token");
   }
 
   try {

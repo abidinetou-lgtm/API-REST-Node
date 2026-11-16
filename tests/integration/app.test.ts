@@ -11,12 +11,34 @@ describe("App", () => {
   it("returns 404 for an unknown route", async () => {
     const res = await api().get("/unknown");
     expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("ROUTE_NOT_FOUND");
+  });
+
+  it("answers every error with the same format and a request id", async () => {
+    const res = await api().get("/tickets");
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({
+      error: {
+        code: "AUTHENTICATION_REQUIRED",
+        message: "Authentication required",
+        requestId: res.headers["x-request-id"],
+      },
+    });
+  });
+
+  it("gives each request its own id", async () => {
+    const first = await api().get("/health");
+    const second = await api().get("/health");
+
+    expect(first.headers["x-request-id"]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(first.headers["x-request-id"]).not.toBe(second.headers["x-request-id"]);
   });
 
   it("returns 400 for invalid JSON", async () => {
     const res = await api().post("/auth/login").set("Content-Type", "application/json").send("{bad");
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe("Invalid JSON");
+    expect(res.body.error.code).toBe("INVALID_JSON");
   });
 
   it("returns 413 when the body is too large", async () => {
