@@ -2,13 +2,17 @@ import { prisma } from "../lib/prisma.js";
 import { HttpError } from "../utils/http-error.js";
 import { sendInvitation } from "./user-token.service.js";
 import { revokeAllSessions } from "./auth.service.js";
-import type { CreateUserInput } from "../schemas/user.schema.js";
+import { recordAudit } from "./audit.service.js";
+import { paginated, paginationArgs } from "../utils/pagination.js";
+import { canManage } from "../utils/roles.js";
+import type { ChangeRoleInput, CreateUserInput, ListUsersQuery } from "../schemas/user.schema.js";
+import type { Prisma } from "../generated/prisma/client.js";
 import type { Role } from "../generated/prisma/enums.js";
 
-type Actor = { id: number; role: Role };
+type Actor = { id: string; role: Role };
 
 type UserRecord = {
-  id: number;
+  id: string;
   email: string;
   name: string;
   role: Role;
@@ -23,21 +27,31 @@ function toPublicUser({ passwordHash, ...user }: UserRecord) {
   return { ...user, status };
 }
 
-async function findUserOrThrow(id: number) {
+async function findUserOrThrow(id: string) {
   const user = await prisma.user.findUnique({ where: { id } });
   if (!user) {
-    throw new HttpError(404, "User not found");
+    throw new HttpError(404, "USER_NOT_FOUND", "User not found");
   }
   return user;
 }
 
-export async function createUser(input: CreateUserInput) {
+export async function createUser(actor: Actor, input: CreateUserInput) {
   const existing = await prisma.user.findUnique({ where: { email: input.email } });
   if (existing) {
-    throw new HttpError(409, "Email already in use");
+    throw new HttpError(409, "EMAIL_ALREADY_IN_USE", "Email already in use");
   }
 
-  const user = await prisma.user.create({ data: input });
+  const user = await prisma.$transaction(async (tx) => {
+    const created = await tx.user.create({ data: input });
+    await recordAudit(tx, {
+      action: "USER_CREATED",
+      actorId: actor.id,
+      targetType: "USER",
+      targetId: created.id,
+      metadata: { email: created.email, role: created.role },
+    });
+    return created;
+  });
 
   // The account is kept even if the email fails: the invitation can be sent again later
   let invitationSent = true;
@@ -51,50 +65,117 @@ export async function createUser(input: CreateUserInput) {
   return { user: toPublicUser(user), invitationSent };
 }
 
-export async function resendInvitation(id: number) {
+export async function resendInvitation(actor: Actor, id: string) {
   const user = await findUserOrThrow(id);
 
   if (user.passwordHash) {
-    throw new HttpError(409, "Invitation already accepted");
+    throw new HttpError(409, "INVITATION_ALREADY_ACCEPTED", "Invitation already accepted");
   }
   if (!user.isActive) {
-    throw new HttpError(409, "Account disabled");
+    throw new HttpError(409, "ACCOUNT_DISABLED", "Account disabled");
   }
 
   await sendInvitation(user);
+  await recordAudit(prisma, { action: "INVITATION_RESENT", actorId: actor.id, targetType: "USER", targetId: id });
 }
 
-export async function listUsers() {
-  const users = await prisma.user.findMany({ orderBy: { createdAt: "desc" } });
-  return users.map(toPublicUser);
+const statusFilters: Record<ListUsersQuery["status"] & string, Prisma.UserWhereInput> = {
+  PENDING: { isActive: true, passwordHash: null },
+  ACTIVE: { isActive: true, passwordHash: { not: null } },
+  DISABLED: { isActive: false },
+};
+
+export async function listUsers(query: ListUsersQuery) {
+  const where: Prisma.UserWhereInput = {
+    AND: [
+      query.role ? { role: { in: query.role } } : {},
+      query.status ? statusFilters[query.status] : {},
+      query.search
+        ? {
+            OR: [
+              { name: { contains: query.search, mode: "insensitive" } },
+              { email: { contains: query.search, mode: "insensitive" } },
+            ],
+          }
+        : {},
+    ],
+  };
+
+  const [users, total] = await prisma.$transaction([
+    prisma.user.findMany({
+      where,
+      orderBy: [{ [query.sort]: query.order }, { id: query.order }],
+      ...paginationArgs(query),
+    }),
+    prisma.user.count({ where }),
+  ]);
+
+  return paginated(users.map(toPublicUser), total, query);
 }
 
-export async function getUser(id: number) {
+export async function getUser(id: string) {
   return toPublicUser(await findUserOrThrow(id));
 }
 
-// Super admin can manage everyone else, admins can only manage agents and users
-function canManage(actor: Actor, targetRole: Role) {
-  if (targetRole === "SUPER_ADMIN") return false;
-  if (actor.role === "SUPER_ADMIN") return true;
-  return actor.role === "ADMIN" && (targetRole === "AGENT" || targetRole === "USER");
-}
-
-export async function setUserActive(actor: Actor, id: number, isActive: boolean) {
+export async function setUserActive(actor: Actor, id: string, isActive: boolean) {
   if (actor.id === id) {
-    throw new HttpError(400, "You cannot change the status of your own account");
+    throw new HttpError(400, "CANNOT_MANAGE_OWN_ACCOUNT", "You cannot change the status of your own account");
   }
 
   const target = await findUserOrThrow(id);
-  if (!canManage(actor, target.role)) {
-    throw new HttpError(403, "Forbidden");
+  if (!canManage(actor.role, target.role)) {
+    throw new HttpError(403, "FORBIDDEN", "Forbidden");
   }
 
-  const user = await prisma.user.update({ where: { id }, data: { isActive } });
-
-  if (!isActive) {
-    await revokeAllSessions(id);
+  if (target.isActive === isActive) {
+    return toPublicUser(target);
   }
+
+  const user = await prisma.$transaction(async (tx) => {
+    const updated = await tx.user.update({ where: { id }, data: { isActive } });
+
+    if (!isActive) {
+      await revokeAllSessions(id, tx);
+    }
+
+    await recordAudit(tx, {
+      action: isActive ? "USER_ENABLED" : "USER_DISABLED",
+      actorId: actor.id,
+      targetType: "USER",
+      targetId: id,
+    });
+    return updated;
+  });
+
+  return toPublicUser(user);
+}
+
+export async function changeUserRole(actor: Actor, id: string, { role }: ChangeRoleInput) {
+  if (actor.id === id) {
+    throw new HttpError(400, "CANNOT_MANAGE_OWN_ACCOUNT", "You cannot change the role of your own account");
+  }
+
+  const target = await findUserOrThrow(id);
+  if (!canManage(actor.role, target.role)) {
+    throw new HttpError(403, "FORBIDDEN", "Forbidden");
+  }
+
+  if (target.role === role) {
+    return toPublicUser(target);
+  }
+
+  // The role is read from the database on every request, so the change applies immediately
+  const user = await prisma.$transaction(async (tx) => {
+    const updated = await tx.user.update({ where: { id }, data: { role } });
+    await recordAudit(tx, {
+      action: "USER_ROLE_CHANGED",
+      actorId: actor.id,
+      targetType: "USER",
+      targetId: id,
+      metadata: { from: target.role, to: role },
+    });
+    return updated;
+  });
 
   return toPublicUser(user);
 }

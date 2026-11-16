@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { prisma } from "../src/lib/prisma.js";
+import { prisma } from "../../src/lib/prisma.js";
 import { PASSWORD, api, bearer, createUser, emailToken, login, loginAs } from "./helpers.js";
 
 describe("POST /auth/login", () => {
@@ -32,7 +32,11 @@ describe("POST /auth/login", () => {
 
     expect(wrongPassword.res.status).toBe(401);
     expect(unknownEmail.res.status).toBe(401);
-    expect(wrongPassword.res.body).toEqual(unknownEmail.res.body);
+    // Only the request id differs
+    expect({ ...wrongPassword.res.body.error, requestId: undefined }).toEqual({
+      ...unknownEmail.res.body.error,
+      requestId: undefined,
+    });
   });
 
   it("refuses an account that has not accepted its invitation", async () => {
@@ -50,7 +54,7 @@ describe("POST /auth/login", () => {
   it("validates the body", async () => {
     const res = await api().post("/auth/login").send({ email: "not-an-email" });
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe("Validation failed");
+    expect(res.body.error.code).toBe("VALIDATION_FAILED");
   });
 });
 

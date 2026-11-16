@@ -17,8 +17,25 @@ Enum TokenType {
   PASSWORD_RESET
 }
 
+Enum AuditAction {
+  USER_CREATED
+  USER_ROLE_CHANGED
+  USER_DISABLED
+  USER_ENABLED
+  INVITATION_RESENT
+  INVITATION_ACCEPTED
+  PASSWORD_RESET
+  REFRESH_TOKEN_REUSED
+  TICKET_STATUS_CHANGED
+}
+
+Enum AuditTargetType {
+  USER
+  TICKET
+}
+
 Table User {
-  id integer [pk, increment]
+  id uuid [pk, note: 'UUID v7']
   email text [not null, unique]
   name text [not null]
   role Role [not null, default: 'USER']
@@ -29,11 +46,11 @@ Table User {
 }
 
 Table Ticket {
-  id integer [pk, increment]
+  id uuid [pk, note: 'UUID v7']
   title text [not null]
   description text [not null]
   status TicketStatus [not null, default: 'OPEN']
-  createdById integer [not null, ref: > User.id]
+  createdById uuid [not null, ref: > User.id]
   createdAt timestamp [not null, default: `now()`]
   updatedAt timestamp [not null]
 
@@ -45,7 +62,7 @@ Table Ticket {
 Table RefreshToken {
   id integer [pk, increment]
   tokenHash text [not null, unique]
-  userId integer [not null, ref: > User.id]
+  userId uuid [not null, ref: > User.id]
   expiresAt timestamp [not null]
   revokedAt timestamp
   createdAt timestamp [not null, default: `now()`]
@@ -59,12 +76,32 @@ Table UserToken {
   id integer [pk, increment]
   tokenHash text [not null, unique]
   type TokenType [not null]
-  userId integer [not null, ref: > User.id]
+  userId uuid [not null, ref: > User.id]
   expiresAt timestamp [not null]
   usedAt timestamp
   createdAt timestamp [not null, default: `now()`]
 
   indexes {
     userId
+  }
+}
+
+// Append only: rows are never updated or deleted
+Table AuditLog {
+  id uuid [pk, note: 'UUID v7']
+  action AuditAction [not null]
+  actorId uuid [ref: > User.id, note: 'Empty when the action is not done by a logged in user']
+  targetType AuditTargetType [not null]
+  targetId uuid [not null]
+  metadata jsonb
+  ipAddress text
+  requestId text
+  createdAt timestamp [not null, default: `now()`]
+
+  indexes {
+    actorId
+    (targetType, targetId)
+    action
+    createdAt
   }
 }

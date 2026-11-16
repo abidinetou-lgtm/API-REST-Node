@@ -66,7 +66,7 @@ describe("GET /users", () => {
     const disabled = await createUser({ isActive: false });
 
     const res = await api().get("/users").set(bearer(token));
-    const byId = new Map(res.body.map((user: { id: number }) => [user.id, user]));
+    const byId = new Map(res.body.data.map((user: { id: string }) => [user.id, user]));
 
     expect(byId.get(pending.id)).toMatchObject({ status: "PENDING" });
     expect(byId.get(disabled.id)).toMatchObject({ status: "DISABLED" });
@@ -126,7 +126,7 @@ describe("Disable and enable accounts", () => {
 
   it("returns 404 for an unknown user", async () => {
     const { token } = await loginAs("SUPER_ADMIN");
-    expect((await api().patch("/users/999999/disable").set(bearer(token))).status).toBe(404);
+    expect((await api().patch("/users/0193a2f4-7c1e-7b3a-9f2d-4e8c1a6b5d70/disable").set(bearer(token))).status).toBe(404);
   });
 });
 
@@ -153,5 +153,28 @@ describe("POST /users/:id/resend-invitation", () => {
     const user = await createUser();
     const res = await api().post(`/users/${user.id}/resend-invitation`).set(bearer(token));
     expect(res.status).toBe(409);
+  });
+});
+
+describe("GET /users filters", () => {
+  it("filters by status, role and search", async () => {
+    const { token } = await loginAs("SUPER_ADMIN");
+    const pending = await createUser({ pending: true, email: "pending.person@example.com" });
+    const agent = await createUser({ role: "AGENT", email: "karim.agent@example.com" });
+    await createUser({ isActive: false });
+
+    const byStatus = await api().get("/users?status=PENDING").set(bearer(token));
+    expect(byStatus.body.data.map((user: { id: string }) => user.id)).toEqual([pending.id]);
+
+    const byRole = await api().get("/users?role=AGENT").set(bearer(token));
+    expect(byRole.body.data.map((user: { id: string }) => user.id)).toEqual([agent.id]);
+
+    const bySearch = await api().get("/users?search=KARIM").set(bearer(token));
+    expect(bySearch.body.data.map((user: { id: string }) => user.id)).toEqual([agent.id]);
+  });
+
+  it("rejects an unknown status", async () => {
+    const { token } = await loginAs("ADMIN");
+    expect((await api().get("/users?status=BANNED").set(bearer(token))).status).toBe(400);
   });
 });

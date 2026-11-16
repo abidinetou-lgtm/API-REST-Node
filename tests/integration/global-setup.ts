@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { TEST_DATABASE_URL } from "./test-env.js";
+import { TEST_DATABASE_URL } from "../test-env.js";
 
 // Runs once before all tests: brings the test database schema up to date
 export default function setup() {

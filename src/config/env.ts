@@ -19,6 +19,9 @@ const envSchema = z
     MAIL_FROM_NAME: z.string().min(1).default("Support Ticket"),
 
     SUPER_ADMIN_EMAIL: z.email().optional(),
+
+    // API documentation on /docs, hidden in production unless enabled
+    DOCS_ENABLED: z.stringbool().optional(),
   })
   .refine((env) => env.NODE_ENV !== "production" || Boolean(env.BREVO_API_KEY), {
     message: "BREVO_API_KEY is required in production",
@@ -32,4 +35,7 @@ if (!parsed.success) {
   process.exit(1);
 }
 
-export const env = parsed.data;
+export const env = {
+  ...parsed.data,
+  DOCS_ENABLED: parsed.data.DOCS_ENABLED ?? parsed.data.NODE_ENV !== "production",
+};

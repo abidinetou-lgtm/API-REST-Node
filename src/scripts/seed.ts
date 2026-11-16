@@ -1,6 +1,7 @@
 import { env } from "../config/env.js";
 import { prisma } from "../lib/prisma.js";
 import { sendInvitation } from "../services/user-token.service.js";
+import { recordAudit } from "../services/audit.service.js";
 
 async function seedSuperAdmin() {
   if (!env.SUPER_ADMIN_EMAIL) {
@@ -27,8 +28,18 @@ async function seedSuperAdmin() {
     throw new Error(`${email} is already used by another account`);
   }
 
-  const user = await prisma.user.create({
-    data: { email, name: "Super Admin", role: "SUPER_ADMIN" },
+  const user = await prisma.$transaction(async (tx) => {
+    const created = await tx.user.create({
+      data: { email, name: "Super Admin", role: "SUPER_ADMIN" },
+    });
+    await recordAudit(tx, {
+      action: "USER_CREATED",
+      actorId: null,
+      targetType: "USER",
+      targetId: created.id,
+      metadata: { email, role: "SUPER_ADMIN", source: "seed" },
+    });
+    return created;
   });
 
   await sendInvitation(user);

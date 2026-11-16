@@ -1,9 +1,9 @@
 import request, { type Response } from "supertest";
 import { vi } from "vitest";
-import { app } from "../src/app.js";
-import { prisma } from "../src/lib/prisma.js";
-import { hashPassword } from "../src/lib/password.js";
-import type { Role } from "../src/generated/prisma/enums.js";
+import { app } from "../../src/app.js";
+import { prisma } from "../../src/lib/prisma.js";
+import { hashPassword } from "../../src/lib/password.js";
+import type { Role } from "../../src/generated/prisma/enums.js";
 
 export const PASSWORD = "Str0ngPassw0rd";
 
