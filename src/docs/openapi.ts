@@ -318,6 +318,8 @@ export const routeDocs: RouteDoc[] = [
     summary: "Write a message on a ticket",
     description:
       "A message of the customer can get an automatic answer from the AI, depending on the status of the ticket. " +
+      "With its answer, the AI proposes a status (OPEN, IN_PROGRESS or RESOLVED), applied only if the rules allow it: " +
+      "it never closes a ticket, never changes the status of an IN_PROGRESS ticket, and only marks it RESOLVED after a reply of the customer. " +
       "A message of the support team stops the automatic answers, and moves an OPEN ticket to IN_PROGRESS. " +
       "A closed ticket cannot receive messages.",
     access: "authenticated",

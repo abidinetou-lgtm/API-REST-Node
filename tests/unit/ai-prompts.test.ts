@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { BASE_RULES, DEFAULT_STATUS_SETTINGS, buildPrompt, isAiStatus, parseAiAnswer } from "../../src/lib/ai-prompts.js";
+import {
+  BASE_RULES,
+  DEFAULT_STATUS_SETTINGS,
+  buildPrompt,
+  isAiStatus,
+  nextStatus,
+  parseAiAnswer,
+} from "../../src/lib/ai-prompts.js";
 
 const ticket = { title: "Black screen", description: "My screen stays black at startup" };
 
@@ -61,16 +68,42 @@ describe("isAiStatus", () => {
 
 describe("parseAiAnswer", () => {
   it("reads a valid answer", () => {
-    expect(parseAiAnswer('{"reply": "  Hello  ", "handoff": true}')).toEqual({ reply: "Hello", handoff: true });
+    expect(parseAiAnswer('{"reply": "  Hello  ", "status": "IN_PROGRESS"}')).toEqual({
+      reply: "Hello",
+      status: "IN_PROGRESS",
+    });
   });
 
-  it("does not hand over the ticket when handoff is missing", () => {
-    expect(parseAiAnswer('{"reply": "Hello"}')).toEqual({ reply: "Hello", handoff: false });
+  it("accepts an answer without status", () => {
+    expect(parseAiAnswer('{"reply": "Hello"}')).toEqual({ reply: "Hello" });
   });
 
-  it("refuses an answer that is not JSON or has no reply", () => {
+  it("refuses an answer that is not JSON, has no reply, or tries to close the ticket", () => {
     expect(() => parseAiAnswer("Hello")).toThrow("not valid JSON");
     expect(() => parseAiAnswer('{"reply": ""}')).toThrow();
     expect(() => parseAiAnswer('{"answer": "Hello"}')).toThrow();
+    expect(() => parseAiAnswer('{"reply": "Bye", "status": "CLOSED"}')).toThrow();
+  });
+});
+
+describe("nextStatus", () => {
+  it("applies the status proposed by the AI", () => {
+    expect(nextStatus({ current: "OPEN", proposed: "IN_PROGRESS", customerHasReplied: false })).toBe("IN_PROGRESS");
+    expect(nextStatus({ current: "OPEN", proposed: "RESOLVED", customerHasReplied: true })).toBe("RESOLVED");
+    expect(nextStatus({ current: "RESOLVED", proposed: "OPEN", customerHasReplied: true })).toBe("OPEN");
+    expect(nextStatus({ current: "RESOLVED", proposed: "IN_PROGRESS", customerHasReplied: true })).toBe("IN_PROGRESS");
+  });
+
+  it("keeps the status without proposal", () => {
+    expect(nextStatus({ current: "RESOLVED", customerHasReplied: true })).toBe("RESOLVED");
+  });
+
+  it("never resolves a ticket before a reply of the customer", () => {
+    expect(nextStatus({ current: "OPEN", proposed: "RESOLVED", customerHasReplied: false })).toBe("OPEN");
+  });
+
+  it("never changes the status of a ticket that a person of the team has", () => {
+    expect(nextStatus({ current: "IN_PROGRESS", proposed: "OPEN", customerHasReplied: true })).toBe("IN_PROGRESS");
+    expect(nextStatus({ current: "IN_PROGRESS", proposed: "RESOLVED", customerHasReplied: true })).toBe("IN_PROGRESS");
   });
 });

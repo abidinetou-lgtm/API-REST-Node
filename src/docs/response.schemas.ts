@@ -86,6 +86,7 @@ export const aiSettingsSchema = z.strictObject({
 
 export const aiSuggestionSchema = z.strictObject({
   suggestion: z.string().meta({ description: "Draft to read and edit before sending it as a message" }),
+  suggestedStatus: z.enum(AI_STATUSES).nullable().meta({ description: "Status the AI would give the ticket. Nothing is changed" }),
 });
 
 export const auditLogSchema = z.strictObject({

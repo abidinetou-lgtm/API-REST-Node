@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "../../src/lib/prisma.js";
-import { BASE_RULES, DEFAULT_STATUS_SETTINGS } from "../../src/lib/ai-prompts.js";
+import { BASE_RULES, DEFAULT_STATUS_SETTINGS, type AiStatus } from "../../src/lib/ai-prompts.js";
 import { aiSettingsSchema, aiStatusSettingSchema, aiSuggestionSchema } from "../../src/docs/response.schemas.js";
 import { waitForPendingReplies } from "../../src/services/ai.service.js";
 import type { AiMessage } from "../../src/lib/ai-client.js";
@@ -13,8 +13,19 @@ vi.mock("../../src/lib/ai-client.js", () => ({
   aiClient: { provider: "openai", model: "test-model", promptId: null, completeJson },
 }));
 
-function aiAnswersOnce(reply: string, handoff = false) {
-  completeJson.mockResolvedValueOnce(JSON.stringify({ reply, handoff }));
+function answer(reply: string, status?: AiStatus) {
+  return JSON.stringify({ reply, ...(status ? { status } : {}) });
+}
+
+function aiAnswersOnce(reply: string, status?: AiStatus) {
+  completeJson.mockResolvedValueOnce(answer(reply, status));
+}
+
+// Lets the test decide when the AI answer arrives
+function aiAnswersLater() {
+  let respond: (text: string) => void = () => {};
+  completeJson.mockImplementationOnce(() => new Promise((resolve) => (respond = resolve)));
+  return (text: string) => respond(text);
 }
 
 // Prompt sent to the AI on its n-th call
@@ -36,6 +47,10 @@ async function write(ticketId: string, token: string, body: string) {
   return res;
 }
 
+function setStatus(ticketId: string, token: string, status: string) {
+  return api().patch(`/tickets/${ticketId}/status`).set(bearer(token)).send({ status });
+}
+
 async function getTicket(ticketId: string, token: string) {
   return (await api().get(`/tickets/${ticketId}`).set(bearer(token))).body;
 }
@@ -47,22 +62,21 @@ async function messagesOf(ticketId: string, token: string) {
 
 beforeEach(() => {
   completeJson.mockReset();
-  completeJson.mockResolvedValue(JSON.stringify({ reply: "Default answer", handoff: false }));
+  completeJson.mockResolvedValue(answer("Default answer", "OPEN"));
 });
 
 describe("Automatic answers of the AI", () => {
-  it("answer a new ticket, without sending the name or email of the customer", async () => {
+  it("answer a new ticket and save the answer, without sending the name or email of the customer", async () => {
     const customer = await loginAs("USER");
-    aiAnswersOnce("Try to restart your computer");
+    aiAnswersOnce("Try to restart your computer", "OPEN");
 
     const res = await openTicket(customer.token);
     expect(res.status).toBe(201);
-    expect(res.body.needsAgent).toBe(false);
 
     expect(await messagesOf(res.body.id, customer.token)).toMatchObject([
       { authorType: "AI", author: null, body: "Try to restart your computer" },
     ]);
-    expect((await getTicket(res.body.id, customer.token)).needsAgent).toBe(false);
+    expect(await getTicket(res.body.id, customer.token)).toMatchObject({ status: "OPEN", needsAgent: false });
 
     const [system, ticket] = promptOfCall(0);
     expect(system.content).toContain(BASE_RULES);
@@ -74,18 +88,44 @@ describe("Automatic answers of the AI", () => {
     expect(sent).not.toContain(customer.user.name);
   });
 
-  it("hand the ticket to the support team when the AI asks for it", async () => {
+  it("move the ticket to IN_PROGRESS when the AI asks for a person, and log it", async () => {
     const customer = await loginAs("USER");
-    aiAnswersOnce("A member of the team will follow up", true);
+    aiAnswersOnce("A member of the team will follow up", "IN_PROGRESS");
 
     const res = await openTicket(customer.token);
 
     expect(await messagesOf(res.body.id, customer.token)).toHaveLength(1);
-    expect((await getTicket(res.body.id, customer.token)).needsAgent).toBe(true);
+    expect(await getTicket(res.body.id, customer.token)).toMatchObject({ status: "IN_PROGRESS", needsAgent: true });
+    const log = await prisma.auditLog.findFirst({ where: { targetId: res.body.id } });
+    expect(log).toMatchObject({
+      action: "TICKET_STATUS_CHANGED",
+      actorId: null,
+      metadata: { from: "OPEN", to: "IN_PROGRESS", source: "AI" },
+    });
 
-    // The ticket now waits for a person: the AI does not answer anymore
+    // A person has the ticket now: the AI does not answer anymore
     await write(res.body.id, customer.token, "Hello?");
     expect(completeJson).toHaveBeenCalledTimes(1);
+  });
+
+  it("mark the ticket RESOLVED when the customer confirms that the problem is solved", async () => {
+    const customer = await loginAs("USER");
+    const ticket = (await openTicket(customer.token)).body;
+
+    aiAnswersOnce("Great, have a nice day!", "RESOLVED");
+    await write(ticket.id, customer.token, "It works now, thank you");
+
+    expect(await getTicket(ticket.id, customer.token)).toMatchObject({ status: "RESOLVED", needsAgent: false });
+  });
+
+  it("never mark RESOLVED a ticket that the customer has not answered about", async () => {
+    const customer = await loginAs("USER");
+    aiAnswersOnce("This should fix it", "RESOLVED");
+
+    const res = await openTicket(customer.token);
+
+    expect((await getTicket(res.body.id, customer.token)).status).toBe("OPEN");
+    expect(await prisma.auditLog.count({ where: { targetId: res.body.id } })).toBe(0);
   });
 
   it("let the support team take over when the AI fails or answers badly", async () => {
@@ -98,9 +138,12 @@ describe("Automatic answers of the AI", () => {
     completeJson.mockResolvedValueOnce("Sorry, I cannot answer in JSON");
     const invalid = await openTicket(customer.token);
 
-    for (const ticket of [failed.body, invalid.body]) {
+    completeJson.mockResolvedValueOnce(answer("Goodbye", "CLOSED" as AiStatus));
+    const closing = await openTicket(customer.token);
+
+    for (const ticket of [failed.body, invalid.body, closing.body]) {
       expect(await messagesOf(ticket.id, customer.token)).toEqual([]);
-      expect((await getTicket(ticket.id, customer.token)).needsAgent).toBe(true);
+      expect(await getTicket(ticket.id, customer.token)).toMatchObject({ status: "OPEN", needsAgent: true });
     }
   });
 
@@ -134,26 +177,36 @@ describe("Automatic answers of the AI", () => {
     expect(await getTicket(ticket.id, customer.token)).toMatchObject({ status: "IN_PROGRESS", needsAgent: true });
   });
 
-  it("answer the customer of a resolved ticket, and hand it back if the problem persists", async () => {
+  it("give a resolved ticket back to the team if the problem persists", async () => {
     const customer = await loginAs("USER");
     const agent = await loginAs("AGENT");
     const ticket = (await openTicket(customer.token)).body;
-    await api().patch(`/tickets/${ticket.id}/status`).set(bearer(agent.token)).send({ status: "RESOLVED" });
+    await setStatus(ticket.id, agent.token, "RESOLVED");
     expect((await getTicket(ticket.id, customer.token)).needsAgent).toBe(false);
 
-    aiAnswersOnce("Sorry about that, an agent will look at it again", true);
+    aiAnswersOnce("Sorry about that, an agent will look at it again", "IN_PROGRESS");
     await write(ticket.id, customer.token, "It broke again this morning");
 
     expect(promptOfCall(1)[0].content).toContain(DEFAULT_STATUS_SETTINGS.RESOLVED.instructions);
     expect((await messagesOf(ticket.id, customer.token)).at(-1)).toMatchObject({ authorType: "AI" });
-    expect((await getTicket(ticket.id, customer.token)).needsAgent).toBe(true);
+    expect(await getTicket(ticket.id, customer.token)).toMatchObject({ status: "IN_PROGRESS", needsAgent: true });
+  });
+
+  it("reopen a resolved ticket when the customer asks a new question that the AI answers", async () => {
+    const customer = await loginAs("USER");
+    const agent = await loginAs("AGENT");
+    const ticket = (await openTicket(customer.token)).body;
+    await setStatus(ticket.id, agent.token, "RESOLVED");
+
+    aiAnswersOnce("You can change it in the settings", "OPEN");
+    await write(ticket.id, customer.token, "And how do I change the language?");
+
+    expect(await getTicket(ticket.id, customer.token)).toMatchObject({ status: "OPEN", needsAgent: false });
   });
 
   it("drop an answer that arrives after a newer customer message", async () => {
     const customer = await loginAs("USER");
-
-    let answerFirst: (text: string) => void = () => {};
-    completeJson.mockImplementationOnce(() => new Promise((resolve) => (answerFirst = resolve)));
+    const answerFirst = aiAnswersLater();
     aiAnswersOnce("Answer to the details");
 
     const ticket = (await api().post("/tickets").set(bearer(customer.token)).send(validTicket)).body;
@@ -163,11 +216,27 @@ describe("Automatic answers of the AI", () => {
     await api().post(`/tickets/${ticket.id}/messages`).set(bearer(customer.token)).send({ body: "More details" });
     await vi.waitFor(() => expect(completeJson).toHaveBeenCalledTimes(2));
 
-    answerFirst(JSON.stringify({ reply: "Answer to the ticket only", handoff: false }));
+    answerFirst(answer("Answer to the ticket only", "OPEN"));
     await waitForPendingReplies();
 
     const aiMessages = (await messagesOf(ticket.id, customer.token)).filter((message) => message.authorType === "AI");
     expect(aiMessages.map((message) => message.body)).toEqual(["Answer to the details"]);
+  });
+
+  it("never override a status changed by a person while the answer is being written", async () => {
+    const customer = await loginAs("USER");
+    const agent = await loginAs("AGENT");
+    const answerLater = aiAnswersLater();
+
+    const ticket = (await api().post("/tickets").set(bearer(customer.token)).send(validTicket)).body;
+    await vi.waitFor(() => expect(completeJson).toHaveBeenCalledTimes(1));
+
+    await setStatus(ticket.id, agent.token, "RESOLVED");
+    answerLater(answer("A member of the team will follow up", "IN_PROGRESS"));
+    await waitForPendingReplies();
+
+    expect(await messagesOf(ticket.id, customer.token)).toEqual([]);
+    expect(await getTicket(ticket.id, customer.token)).toMatchObject({ status: "RESOLVED", needsAgent: false });
   });
 });
 
@@ -239,23 +308,28 @@ describe("AI settings", () => {
 });
 
 describe("POST /tickets/:id/ai-suggestion", () => {
-  it("gives a draft to the support team without saving or sending it", async () => {
+  it("gives a draft and a suggested status to the team, without saving, sending or changing anything", async () => {
     const customer = await loginAs("USER");
     const agent = await loginAs("AGENT");
     const ticket = (await openTicket(customer.token)).body;
     await write(ticket.id, agent.token, "I am taking your ticket");
-    await write(ticket.id, customer.token, "Here is the error code: 0x0001");
+    await write(ticket.id, customer.token, "I installed the driver, it works!");
 
-    aiAnswersOnce("Thanks, this code means the driver is missing");
+    aiAnswersOnce("Glad to hear it, I am closing the subject", "RESOLVED");
     const res = await api().post(`/tickets/${ticket.id}/ai-suggestion`).set(bearer(agent.token));
 
     expect(res.status).toBe(200);
-    expect(aiSuggestionSchema.parse(res.body)).toEqual({ suggestion: "Thanks, this code means the driver is missing" });
+    expect(aiSuggestionSchema.parse(res.body)).toEqual({
+      suggestion: "Glad to hear it, I am closing the subject",
+      suggestedStatus: "RESOLVED",
+    });
     const system = promptOfCall(1)[0].content;
     expect(system).toContain("draft for a person of the support team");
     expect(system).toContain(DEFAULT_STATUS_SETTINGS.IN_PROGRESS.instructions);
-    // First answer of the AI, the agent, the customer: the draft was not added
+
+    // First answer of the AI, the agent, the customer: the draft was not added and the status did not change
     expect(await messagesOf(ticket.id, customer.token)).toHaveLength(3);
+    expect((await getTicket(ticket.id, customer.token)).status).toBe("IN_PROGRESS");
   });
 
   it("is reserved to the support team", async () => {
@@ -276,7 +350,7 @@ describe("POST /tickets/:id/ai-suggestion", () => {
     expect(failed.status).toBe(502);
     expect(failed.body.error.code).toBe("AI_UNAVAILABLE");
 
-    await api().patch(`/tickets/${ticket.id}/status`).set(bearer(agent.token)).send({ status: "CLOSED" });
+    await setStatus(ticket.id, agent.token, "CLOSED");
     expect((await api().post(`/tickets/${ticket.id}/ai-suggestion`).set(bearer(agent.token))).status).toBe(409);
   });
 });

@@ -6,6 +6,7 @@ import {
   DEFAULT_STATUS_SETTINGS,
   buildPrompt,
   isAiStatus,
+  nextStatus,
   parseAiAnswer,
   type AiAnswer,
   type AiStatus,
@@ -172,11 +173,12 @@ async function autoReply(client: AiClient, ticketId: string) {
   if (!conversation || !isAiStatus(conversation.status)) {
     return;
   }
+  const currentStatus = conversation.status;
   const lastMessageId = conversation.messages.at(-1)?.id ?? null;
 
   let answer: AiAnswer;
   try {
-    answer = await askAi(client, conversation, conversation.status, "reply");
+    answer = await askAi(client, conversation, currentStatus, "reply");
   } catch (error) {
     // The customer must not stay without an answer: a person of the team takes over
     console.error(`AI auto reply failed for ticket ${ticketId}`, error);
@@ -198,14 +200,37 @@ async function autoReply(client: AiClient, ticketId: string) {
       return;
     }
 
-    // The status changed during the generation: the answer may not fit anymore
-    if (ticket.status !== conversation.status) {
-      await tx.ticket.update({ where: { id: ticketId }, data: { needsAgent: true } });
+    // A person changed the status during the generation: their decision wins and the answer is dropped.
+    // If the ticket is still active, the last message of the customer now waits for a person.
+    if (ticket.status !== currentStatus) {
+      if (ticket.status === "OPEN" || ticket.status === "IN_PROGRESS") {
+        await tx.ticket.update({ where: { id: ticketId }, data: { needsAgent: true } });
+      }
       return;
     }
 
+    const status = nextStatus({
+      current: currentStatus,
+      proposed: answer.status,
+      customerHasReplied: conversation.messages.some((message) => message.authorType === "CUSTOMER"),
+    });
+
     await tx.ticketMessage.create({ data: { ticketId, authorType: "AI", body: answer.reply } });
-    await tx.ticket.update({ where: { id: ticketId }, data: { needsAgent: answer.handoff } });
+    await tx.ticket.update({
+      where: { id: ticketId },
+      // The AI asking for a person is the signal for the team, even on a ticket already IN_PROGRESS
+      data: { status, needsAgent: answer.status === "IN_PROGRESS" },
+    });
+
+    if (status !== currentStatus) {
+      await recordAudit(tx, {
+        action: "TICKET_STATUS_CHANGED",
+        actorId: null,
+        targetType: "TICKET",
+        targetId: ticketId,
+        metadata: { from: currentStatus, to: status, source: "AI" },
+      });
+    }
   });
 }
 
@@ -244,7 +269,8 @@ export async function suggestReply(ticketId: string) {
 
   try {
     const answer = await askAi(aiClient, conversation, conversation.status, "draft");
-    return { suggestion: answer.reply };
+    // Only shown to the agent: the status of the ticket does not change
+    return { suggestion: answer.reply, suggestedStatus: answer.status ?? null };
   } catch (error) {
     console.error(`AI suggestion failed for ticket ${ticketId}`, error);
     throw new HttpError(502, "AI_UNAVAILABLE", "The AI could not answer, try again later");
