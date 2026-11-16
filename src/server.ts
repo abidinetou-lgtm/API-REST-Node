@@ -1,6 +1,7 @@
 import { env } from "./config/env.js";
 import { app } from "./app.js";
 import { prisma } from "./lib/prisma.js";
+import { waitForPendingReplies } from "./services/ai.service.js";
 
 const server = app.listen(env.PORT, () => {
   console.log(`Server running on port ${env.PORT}`);
@@ -10,6 +11,8 @@ const server = app.listen(env.PORT, () => {
 function shutdown(signal: string) {
   console.log(`${signal} received, shutting down`);
   server.close(async () => {
+    // The AI answers being written are saved before stopping
+    await waitForPendingReplies();
     await prisma.$disconnect();
     process.exit(0);
   });

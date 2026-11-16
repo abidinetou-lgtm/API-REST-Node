@@ -6,6 +6,8 @@ import {
   resetPasswordSchema,
 } from "../schemas/auth.schema.js";
 import { listAuditLogsSchema } from "../schemas/audit.schema.js";
+import { aiStatusParamsSchema, updateAiSettingSchema } from "../schemas/ai.schema.js";
+import { createMessageSchema, listMessagesSchema } from "../schemas/ticket-message.schema.js";
 import {
   createTicketSchema,
   listTicketsSchema,
@@ -15,6 +17,9 @@ import {
 import { changeRoleSchema, createUserSchema, listUsersSchema, userIdSchema } from "../schemas/user.schema.js";
 import { ADMIN_ROLES, STAFF_ROLES } from "../utils/roles.js";
 import {
+  aiSettingsSchema,
+  aiStatusSettingSchema,
+  aiSuggestionSchema,
   auditLogSchema,
   createdUserSchema,
   currentUserSchema,
@@ -23,12 +28,13 @@ import {
   messageSchema,
   paginatedSchema,
   sessionSchema,
+  ticketMessageSchema,
   ticketSchema,
   userSchema,
 } from "./response.schemas.js";
 import type { Role } from "../generated/prisma/enums.js";
 
-type Method = "get" | "post" | "patch";
+type Method = "get" | "post" | "patch" | "put";
 type Access = "public" | "refresh-cookie" | Role[] | "authenticated";
 
 export type RouteDoc = {
@@ -246,11 +252,14 @@ export const routeDocs: RouteDoc[] = [
     operationId: "createTicket",
     tag: "Tickets",
     summary: "Create a ticket",
-    description: "The ticket is OPEN and belongs to the logged in user.",
+    description:
+      "The ticket is OPEN and belongs to the logged in user. " +
+      "When the AI is enabled for OPEN tickets, it posts a first answer a few seconds later (see GET /tickets/:id/messages). " +
+      "Limited to 60 requests per account every 15 minutes, shared with the messages and the AI suggestions.",
     access: "authenticated",
     body: createTicketSchema,
     response: { status: 201, description: "Ticket created", schema: ticketSchema },
-    errors: [400, 401],
+    errors: [400, 401, 429],
   },
   {
     method: "get",
@@ -288,6 +297,72 @@ export const routeDocs: RouteDoc[] = [
     response: { status: 200, description: "The updated ticket", schema: ticketSchema },
     errors: [400, 401, 403, 404],
   },
+  {
+    method: "get",
+    path: "/tickets/:id/messages",
+    operationId: "listTicketMessages",
+    tag: "Tickets",
+    summary: "Read the conversation of a ticket",
+    description: "Oldest message first by default. A user asking for the ticket of someone else gets 404.",
+    access: "authenticated",
+    params: ticketIdSchema,
+    query: listMessagesSchema,
+    response: { status: 200, description: "One page of messages", schema: paginatedSchema(ticketMessageSchema) },
+    errors: [400, 401, 404],
+  },
+  {
+    method: "post",
+    path: "/tickets/:id/messages",
+    operationId: "createTicketMessage",
+    tag: "Tickets",
+    summary: "Write a message on a ticket",
+    description:
+      "A message of the customer can get an automatic answer from the AI, depending on the status of the ticket. " +
+      "A message of the support team stops the automatic answers, and moves an OPEN ticket to IN_PROGRESS. " +
+      "A closed ticket cannot receive messages.",
+    access: "authenticated",
+    params: ticketIdSchema,
+    body: createMessageSchema,
+    response: { status: 201, description: "Message created", schema: ticketMessageSchema },
+    errors: [400, 401, 404, 409, 429],
+  },
+  {
+    method: "post",
+    path: "/tickets/:id/ai-suggestion",
+    operationId: "suggestTicketReply",
+    tag: "AI",
+    summary: "Ask the AI for a draft answer",
+    description: "Nothing is saved or sent to the customer: the draft is to read, edit and send as a message.",
+    access: STAFF_ROLES,
+    params: ticketIdSchema,
+    response: { status: 200, description: "The draft", schema: aiSuggestionSchema },
+    errors: [400, 401, 403, 404, 409, 429, 502, 503],
+  },
+  {
+    method: "get",
+    path: "/ai/settings",
+    operationId: "getAiSettings",
+    tag: "AI",
+    summary: "See the AI configuration and its behavior for each status",
+    access: ADMIN_ROLES,
+    response: { status: 200, description: "The AI configuration", schema: aiSettingsSchema },
+    errors: [401, 403],
+  },
+  {
+    method: "put",
+    path: "/ai/settings/:status",
+    operationId: "updateAiSetting",
+    tag: "AI",
+    summary: "Change the behavior of the AI for one status",
+    description:
+      "The instructions are added to fixed safety rules that cannot be changed. " +
+      "The change is saved in the audit logs with the previous value.",
+    access: ["SUPER_ADMIN"],
+    params: aiStatusParamsSchema,
+    body: updateAiSettingSchema,
+    response: { status: 200, description: "The updated setting", schema: aiStatusSettingSchema },
+    errors: [400, 401, 403],
+  },
 ];
 
 const errorDescriptions: Record<number, string> = {
@@ -297,6 +372,8 @@ const errorDescriptions: Record<number, string> = {
   404: "Not found",
   409: "Conflict with the current state",
   429: "Too many requests, try again later",
+  502: "The AI did not answer correctly, try again later (AI_UNAVAILABLE)",
+  503: "The AI is not configured on this server (AI_DISABLED)",
 };
 
 const roleNames: Record<Role, string> = {
@@ -410,6 +487,7 @@ function buildDocument() {
       { name: "Auth", description: "Login, sessions, invitation and password reset" },
       { name: "Users", description: "Account management" },
       { name: "Tickets", description: "Support tickets" },
+      { name: "AI", description: "Answers written by the AI and their settings" },
       { name: "Audit logs", description: "History of the sensitive actions" },
       { name: "Health", description: "Monitoring" },
     ],

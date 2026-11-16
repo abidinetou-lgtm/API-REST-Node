@@ -3,6 +3,7 @@ import { HttpError } from "../utils/http-error.js";
 import { STAFF_ROLES } from "../utils/roles.js";
 import { paginated, paginationArgs } from "../utils/pagination.js";
 import { recordAudit } from "./audit.service.js";
+import { canAutoReply, scheduleAutoReply } from "./ai.service.js";
 import type { CreateTicketInput, ListTicketsQuery } from "../schemas/ticket.schema.js";
 import type { Prisma } from "../generated/prisma/client.js";
 import type { Role, TicketStatus } from "../generated/prisma/enums.js";
@@ -14,21 +15,30 @@ const ticketSelect = {
   title: true,
   description: true,
   status: true,
+  needsAgent: true,
   createdAt: true,
   updatedAt: true,
   createdBy: { select: { id: true, name: true, email: true } },
 };
 
 // Users only have access to their own tickets, the support team to all of them
-function visibleTicketsFilter(actor: Actor) {
+export function visibleTicketsFilter(actor: Actor) {
   return STAFF_ROLES.includes(actor.role) ? {} : { createdById: actor.id };
 }
 
 export async function createTicket(actor: Actor, input: CreateTicketInput) {
-  return prisma.ticket.create({
-    data: { ...input, createdById: actor.id },
+  const willAutoReply = await canAutoReply({ id: null, status: "OPEN", needsAgent: false });
+
+  const ticket = await prisma.ticket.create({
+    // Without an automatic answer, the ticket waits for a person of the team
+    data: { ...input, createdById: actor.id, needsAgent: !willAutoReply },
     select: ticketSelect,
   });
+
+  if (willAutoReply) {
+    scheduleAutoReply(ticket.id);
+  }
+  return ticket;
 }
 
 export async function listTickets(actor: Actor, query: ListTicketsQuery) {
@@ -37,6 +47,7 @@ export async function listTickets(actor: Actor, query: ListTicketsQuery) {
       visibleTicketsFilter(actor),
       query.status ? { status: { in: query.status } } : {},
       query.createdById ? { createdById: query.createdById } : {},
+      query.needsAgent !== undefined ? { needsAgent: query.needsAgent } : {},
       query.createdFrom || query.createdTo ? { createdAt: { gte: query.createdFrom, lte: query.createdTo } } : {},
       query.search
         ? {
@@ -83,7 +94,13 @@ export async function updateTicketStatus(actor: Actor, id: string, status: Ticke
   }
 
   return prisma.$transaction(async (tx) => {
-    const updated = await tx.ticket.update({ where: { id }, data: { status }, select: ticketSelect });
+    // A resolved or closed ticket is not waiting for the team anymore
+    const done = status === "RESOLVED" || status === "CLOSED";
+    const updated = await tx.ticket.update({
+      where: { id },
+      data: { status, ...(done ? { needsAgent: false } : {}) },
+      select: ticketSelect,
+    });
 
     if (ticket.status !== status) {
       await recordAudit(tx, {

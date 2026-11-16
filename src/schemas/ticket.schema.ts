@@ -20,6 +20,7 @@ export const listTicketsSchema = paginationSchema
     status: commaList(z.enum(TicketStatus)).optional(),
     search: searchSchema.optional(),
     createdById: z.uuid().optional(),
+    needsAgent: z.stringbool().optional().meta({ description: "true: only the tickets waiting for a person of the support team" }),
     createdFrom: z.coerce.date().optional(),
     createdTo: z.coerce.date().optional(),
     sort: z.enum(["createdAt", "updatedAt", "title", "status"]).default("createdAt"),
