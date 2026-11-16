@@ -7,6 +7,7 @@ import { authRouter } from "./routes/auth.routes.js";
 import { ticketRouter } from "./routes/ticket.routes.js";
 import { userRouter } from "./routes/user.routes.js";
 import { auditRouter } from "./routes/audit.routes.js";
+import { aiRouter } from "./routes/ai.routes.js";
 import { docsRouter } from "./routes/docs.routes.js";
 import { globalLimiter } from "./middlewares/rate-limit.middleware.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
@@ -50,6 +51,7 @@ export const apiRouters = {
   "/tickets": ticketRouter,
   "/users": userRouter,
   "/audit-logs": auditRouter,
+  "/ai": aiRouter,
 };
 
 for (const [path, router] of Object.entries(apiRouters)) {

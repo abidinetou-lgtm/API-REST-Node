@@ -12,4 +12,13 @@ export const testEnv = {
   BREVO_API_KEY: "",
   MAIL_FROM_EMAIL: "no-reply@example.com",
   MAIL_FROM_NAME: "Support Ticket",
+  // Empty key: the tests never call a real AI, even if a key is in .env. The AI tests use a fake one.
+  // The other values are set so that the AI settings of .env never change the tests.
+  AI_API_KEY: "",
+  AI_PROVIDER: "openai",
+  AI_MODEL: "",
+  AI_PROMPT_ID: "",
+  AI_PROMPT_VERSION: "",
+  AI_BASE_URL: "",
+  AI_MAX_AUTO_REPLIES: "3",
 };

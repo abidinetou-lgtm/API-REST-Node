@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { AuditAction, AuditTargetType, Role, TicketStatus } from "../generated/prisma/enums.js";
+import { AuditAction, AuditTargetType, MessageAuthorType, Role, TicketStatus } from "../generated/prisma/enums.js";
+import { AI_STATUSES } from "../lib/ai-prompts.js";
 
 // Shape of the API responses. Strict objects: a field that is not documented here
 // (a password hash for example) makes the contract tests fail.
@@ -47,9 +48,45 @@ export const ticketSchema = z.strictObject({
   title: z.string(),
   description: z.string(),
   status: z.enum(TicketStatus),
+  needsAgent: z.boolean().meta({ description: "true while the customer waits for an answer from a person of the support team" }),
   createdAt: dateTime,
   updatedAt: dateTime,
   createdBy: userSummarySchema,
+});
+
+// Name only: the email address of the support team is not shown to the customers
+const authorSchema = z.strictObject({ id: z.uuid(), name: z.string() });
+
+export const ticketMessageSchema = z.strictObject({
+  id: z.uuid(),
+  ticketId: z.uuid(),
+  authorType: z.enum(MessageAuthorType).meta({ description: "CUSTOMER, SUPPORT (a person of the team) or AI" }),
+  author: authorSchema.nullable().meta({ description: "null for the messages of the AI" }),
+  body: z.string(),
+  createdAt: dateTime,
+});
+
+export const aiStatusSettingSchema = z.strictObject({
+  status: z.enum(AI_STATUSES),
+  autoReply: z.boolean(),
+  instructions: z.string(),
+  isDefault: z.boolean().meta({ description: "true while nobody changed the setting" }),
+  updatedAt: dateTime.nullable(),
+  updatedBy: authorSchema.nullable(),
+});
+
+export const aiSettingsSchema = z.strictObject({
+  enabled: z.boolean().meta({ description: "false while AI_API_KEY is not set" }),
+  provider: z.enum(["openai", "deepseek"]).nullable(),
+  model: z.string().nullable().meta({ description: "null when the model is chosen in the OpenAI dashboard prompt" }),
+  promptId: z.string().nullable().meta({ description: "Prompt of the OpenAI dashboard used as reference, if any" }),
+  maxAutoReplies: z.int(),
+  statuses: z.array(aiStatusSettingSchema),
+});
+
+export const aiSuggestionSchema = z.strictObject({
+  suggestion: z.string().meta({ description: "Draft to read and edit before sending it as a message" }),
+  suggestedStatus: z.enum(AI_STATUSES).nullable().meta({ description: "Status the AI would give the ticket. Nothing is changed" }),
 });
 
 export const auditLogSchema = z.strictObject({
