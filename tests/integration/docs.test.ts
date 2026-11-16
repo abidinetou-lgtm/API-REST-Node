@@ -80,8 +80,19 @@ describe("API documentation", () => {
     expectDocumented("listTickets", await api().get("/tickets").set(auth));
     expectDocumented("getTicket", await api().get(`/tickets/${ticket.body.id}`).set(auth));
     expectDocumented(
+      "createTicketMessage",
+      await api().post(`/tickets/${ticket.body.id}/messages`).set(auth).send({ body: "Still jammed" }),
+    );
+    expectDocumented("listTicketMessages", await api().get(`/tickets/${ticket.body.id}/messages`).set(auth));
+    expectDocumented(
       "updateTicketStatus",
       await api().patch(`/tickets/${ticket.body.id}/status`).set(auth).send({ status: "CLOSED" }),
+    );
+
+    expectDocumented("getAiSettings", await api().get("/ai/settings").set(auth));
+    expectDocumented(
+      "updateAiSetting",
+      await api().put("/ai/settings/OPEN").set(auth).send({ autoReply: false, instructions: "Say that we will answer soon." }),
     );
 
     expectDocumented("listAuditLogs", await api().get("/audit-logs").set(auth));

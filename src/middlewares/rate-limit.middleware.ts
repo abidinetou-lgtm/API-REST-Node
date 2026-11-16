@@ -37,6 +37,17 @@ export const loginAccountLimiter = rateLimit({
   handler: tooManyRequests,
 });
 
+// Per account, for the requests that create content and can call the paid AI.
+// Must run after authenticate. Every route using it shares the same counter.
+export const userWriteLimiter = rateLimit({
+  windowMs: FIFTEEN_MINUTES,
+  limit: 60,
+  keyGenerator: (req) => `user:${req.user?.id}`,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  handler: tooManyRequests,
+});
+
 // For endpoints exposed to brute force or email spam. Each call creates its own counter.
 export function sensitiveLimiter() {
   return rateLimit({
