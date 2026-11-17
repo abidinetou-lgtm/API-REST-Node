@@ -4,6 +4,7 @@ import { generateToken, hashToken, signAccessToken, verifyAccessToken } from "..
 import { testEnv } from "../test-env.js";
 
 const userId = "0193a2f4-7c1e-7b3a-9f2d-4e8c1a6b5d70";
+const sessionId = 42;
 
 describe("generateToken", () => {
   it("creates long, unique, URL safe tokens", () => {
@@ -30,25 +31,25 @@ describe("access tokens", () => {
   });
 
   it("contain the user id and role", () => {
-    const token = signAccessToken({ id: userId, role: "AGENT" });
+    const token = signAccessToken({ id: userId, role: "AGENT" }, sessionId);
 
-    expect(verifyAccessToken(token)).toBe(userId);
-    expect(jwt.decode(token)).toMatchObject({ sub: userId, role: "AGENT" });
+    expect(verifyAccessToken(token)).toEqual({ userId, sessionId });
+    expect(jwt.decode(token)).toMatchObject({ sub: userId, role: "AGENT", sid: sessionId });
   });
 
   it("expire after 15 minutes", () => {
     vi.useFakeTimers();
-    const token = signAccessToken({ id: userId, role: "USER" });
+    const token = signAccessToken({ id: userId, role: "USER" }, sessionId);
 
     vi.advanceTimersByTime(14 * 60 * 1000);
-    expect(verifyAccessToken(token)).toBe(userId);
+    expect(verifyAccessToken(token)).toEqual({ userId, sessionId });
 
     vi.advanceTimersByTime(2 * 60 * 1000);
     expect(verifyAccessToken(token)).toBeNull();
   });
 
   it("are refused when modified", () => {
-    const [header, , signature] = signAccessToken({ id: userId, role: "USER" }).split(".");
+    const [header, , signature] = signAccessToken({ id: userId, role: "USER" }, sessionId).split(".");
     const forgedPayload = Buffer.from(JSON.stringify({ sub: userId, role: "SUPER_ADMIN" })).toString("base64url");
 
     expect(verifyAccessToken(`${header}.${forgedPayload}.${signature}`)).toBeNull();

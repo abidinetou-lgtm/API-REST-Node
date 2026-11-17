@@ -7,19 +7,30 @@ import type { Role } from "../generated/prisma/enums.js";
 export const authenticate: RequestHandler = async (req, _res, next) => {
   const header = req.headers.authorization;
   const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
-  const userId = token ? verifyAccessToken(token) : null;
+  const payload = token ? verifyAccessToken(token) : null;
 
-  if (!userId) {
+  if (!payload) {
     throw new HttpError(401, "AUTHENTICATION_REQUIRED", "Authentication required");
   }
 
   // Loaded on every request so that a disabled account or a role change applies immediately
   const user = await prisma.user.findUnique({
-    where: { id: userId },
+    where: { id: payload.userId },
     select: { id: true, email: true, name: true, role: true, isActive: true },
   });
 
   if (!user || !user.isActive) {
+    throw new HttpError(401, "AUTHENTICATION_REQUIRED", "Authentication required");
+  }
+
+  // The session behind this access token must still be active. Logging out, rotating the refresh
+  // token or resetting the password revokes it, which immediately invalidates the access token.
+  const session = await prisma.refreshToken.findUnique({
+    where: { id: payload.sessionId },
+    select: { revokedAt: true, userId: true },
+  });
+
+  if (!session || session.revokedAt !== null || session.userId !== user.id) {
     throw new HttpError(401, "AUTHENTICATION_REQUIRED", "Authentication required");
   }
 
