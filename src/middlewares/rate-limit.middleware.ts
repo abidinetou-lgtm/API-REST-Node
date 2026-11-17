@@ -48,6 +48,18 @@ export const userWriteLimiter = rateLimit({
   handler: tooManyRequests,
 });
 
+// Dedicated, much stricter limit for the actions that trigger the paid AI (creating a ticket).
+// Its own counter, separate from userWriteLimiter, so a user cannot spam expensive AI calls.
+// Must run after authenticate.
+export const aiTriggerLimiter = rateLimit({
+  windowMs: FIFTEEN_MINUTES,
+  limit: 5,
+  keyGenerator: (req) => `ai:${req.user?.id}`,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  handler: tooManyRequests,
+});
+
 // For endpoints exposed to brute force or email spam. Each call creates its own counter.
 export function sensitiveLimiter() {
   return rateLimit({
