@@ -18,16 +18,19 @@ type SessionUser = { id: string; email: string; name: string; role: Role };
 async function createSession(user: SessionUser) {
   const refreshToken = generateToken();
 
-  await prisma.refreshToken.create({
+  const session = await prisma.refreshToken.create({
     data: {
       tokenHash: hashToken(refreshToken),
       userId: user.id,
       expiresAt: new Date(Date.now() + env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000),
     },
+    select: { id: true },
   });
 
   return {
-    accessToken: signAccessToken(user),
+    // The access token is bound to this session, so revoking the session (logout, rotation,
+    // password reset) also invalidates the access token.
+    accessToken: signAccessToken(user, session.id),
     refreshToken,
     user: { id: user.id, email: user.email, name: user.name, role: user.role },
   };
