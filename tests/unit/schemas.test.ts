@@ -15,10 +15,15 @@ describe("emails", () => {
 });
 
 describe("passwords", () => {
-  it("need between 8 and 128 characters", () => {
-    expect(passwordSchema.safeParse("1234567").success).toBe(false);
-    expect(passwordSchema.safeParse("12345678").success).toBe(true);
-    expect(passwordSchema.safeParse("x".repeat(129)).success).toBe(false);
+  it("require 12+ characters, mixed case, a digit, and reject common passwords", () => {
+    expect(passwordSchema.safeParse("Sh0rtPass").success).toBe(false); // too short (9)
+    expect(passwordSchema.safeParse("12345678").success).toBe(false); // short + no letters
+    expect(passwordSchema.safeParse("alllowercase1").success).toBe(false); // no uppercase
+    expect(passwordSchema.safeParse("NOLOWERCASE12").success).toBe(false); // no lowercase
+    expect(passwordSchema.safeParse("NoDigitsHere!").success).toBe(false); // no digit
+    expect(passwordSchema.safeParse("Password1234").success).toBe(false); // too common
+    expect(passwordSchema.safeParse("Str0ngPassw0rd").success).toBe(true); // valid
+    expect(passwordSchema.safeParse("x".repeat(129)).success).toBe(false); // too long
   });
 });
 
