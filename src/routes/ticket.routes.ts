@@ -5,7 +5,7 @@ import * as aiController from "../controllers/ai.controller.js";
 import { createTicketSchema, listTicketsSchema, ticketIdSchema, updateStatusSchema } from "../schemas/ticket.schema.js";
 import { createMessageSchema, listMessagesSchema } from "../schemas/ticket-message.schema.js";
 import { authenticate, authorize } from "../middlewares/auth.middleware.js";
-import { userWriteLimiter } from "../middlewares/rate-limit.middleware.js";
+import { userWriteLimiter, aiTriggerLimiter } from "../middlewares/rate-limit.middleware.js";
 import { validate } from "../middlewares/validate.middleware.js";
 import { STAFF_ROLES } from "../utils/roles.js";
 
@@ -13,7 +13,7 @@ export const ticketRouter = Router();
 
 ticketRouter.use(authenticate);
 
-ticketRouter.post("/", userWriteLimiter, validate({ body: createTicketSchema }), ticketController.create);
+ticketRouter.post("/", userWriteLimiter, aiTriggerLimiter, validate({ body: createTicketSchema }), ticketController.create);
 ticketRouter.get("/", validate({ query: listTicketsSchema }), ticketController.list);
 ticketRouter.get("/:id", validate({ params: ticketIdSchema }), ticketController.getById);
 ticketRouter.patch(

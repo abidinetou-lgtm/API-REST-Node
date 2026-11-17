@@ -8,6 +8,8 @@ export const testEnv = {
   APP_URL: "http://localhost:5173",
   CORS_ORIGIN: "http://localhost:5173",
   JWT_ACCESS_SECRET: "test-secret-that-is-long-enough-for-validation",
+  // The docs are now off by default; the tests enable them explicitly to check the /docs route
+  DOCS_ENABLED: "true",
   // Empty key: emails are printed instead of being sent
   BREVO_API_KEY: "",
   MAIL_FROM_EMAIL: "no-reply@example.com",

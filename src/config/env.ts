@@ -62,5 +62,5 @@ if (!parsed.success) {
 
 export const env = {
   ...parsed.data,
-  DOCS_ENABLED: parsed.data.DOCS_ENABLED ?? parsed.data.NODE_ENV !== "production",
+  DOCS_ENABLED: (parsed.data.DOCS_ENABLED ?? false) && parsed.data.NODE_ENV !== "production",
 };
